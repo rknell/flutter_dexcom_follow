@@ -1,0 +1,14 @@
+name: dexcom_share_api
+description: >-
+  Dart client for the unofficial Dexcom Share API. Vendored in this repo for a
+  self-contained clone; you can also depend on it via path or publish it separately.
+version: 0.1.0
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  http: ^1.2.2
+
+dev_dependencies:
+  test: ^1.25.8
