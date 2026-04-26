@@ -8,6 +8,9 @@ const Duration kCriticalLowRepeatInterval = Duration(minutes: 1);
 /// Predicted lows are safety alerts, but less urgent than a current critical low.
 const Duration kPredictedLowRepeatInterval = Duration(minutes: 5);
 
+/// Stale/no-data alarms repeat while Dexcom is not returning a fresh reading.
+const Duration kNoDataRepeatInterval = Duration(minutes: 5);
+
 /// Keep predicted-low alarms below the one-decimal display boundary for 3.1.
 const double kPredictedLowAlarmMmol = kCriticalLowMmol - 0.05;
 
@@ -87,6 +90,10 @@ AlarmDecision evaluateAlarm({
     return const AlarmDecision(shouldTrigger: false, reason: 'in-range');
   }
 
+  if (state.lastAlarmedTimestampIsoUtc == timestampIsoUtc) {
+    return const AlarmDecision(shouldTrigger: false, reason: 'no-new-reading');
+  }
+
   final lastAt = state.lastAlarmedAt;
   if (lastAt != null && now.difference(lastAt) < policy.minRepeatInterval) {
     return const AlarmDecision(shouldTrigger: false, reason: 'repeat-interval');
@@ -99,6 +106,7 @@ AlarmDecision evaluateAlarm({
 AlarmDecision evaluateCriticalLowAlarm({
   required AlarmState state,
   required double mmol,
+  required String timestampIsoUtc,
   required DateTime now,
 }) {
   if (mmol > kCriticalLowMmol) {
@@ -106,6 +114,10 @@ AlarmDecision evaluateCriticalLowAlarm({
       shouldTrigger: false,
       reason: 'above-critical-low',
     );
+  }
+
+  if (state.lastAlarmedTimestampIsoUtc == timestampIsoUtc) {
+    return const AlarmDecision(shouldTrigger: false, reason: 'no-new-reading');
   }
 
   final lastAt = state.lastCriticalLowAlarmAt;
@@ -123,6 +135,7 @@ AlarmDecision evaluateCriticalLowAlarm({
 AlarmDecision evaluatePredictedLowAlarm({
   required AlarmState state,
   required double? predictedMmol,
+  required String timestampIsoUtc,
   required DateTime now,
   bool predictionCanAlarm = true,
   bool isEnabled = true,
@@ -156,6 +169,10 @@ AlarmDecision evaluatePredictedLowAlarm({
     );
   }
 
+  if (state.lastAlarmedTimestampIsoUtc == timestampIsoUtc) {
+    return const AlarmDecision(shouldTrigger: false, reason: 'no-new-reading');
+  }
+
   final lastAt = state.lastPredictedLowAlarmAt;
   if (lastAt != null && now.difference(lastAt) < kPredictedLowRepeatInterval) {
     return const AlarmDecision(
@@ -165,4 +182,25 @@ AlarmDecision evaluatePredictedLowAlarm({
   }
 
   return const AlarmDecision(shouldTrigger: true, reason: 'predicted-low');
+}
+
+AlarmDecision evaluateNoDataAlarm({
+  required AlarmState state,
+  required DateTime now,
+  bool isNoData = true,
+  Duration repeatInterval = kNoDataRepeatInterval,
+}) {
+  if (!isNoData) {
+    return const AlarmDecision(shouldTrigger: false, reason: 'data-available');
+  }
+
+  final lastAt = state.lastAlarmedAt;
+  if (lastAt != null && now.difference(lastAt) < repeatInterval) {
+    return const AlarmDecision(
+      shouldTrigger: false,
+      reason: 'no-data-repeat-interval',
+    );
+  }
+
+  return const AlarmDecision(shouldTrigger: true, reason: 'no-data');
 }

@@ -245,6 +245,7 @@ class AppState extends ChangeNotifier {
     final critical = evaluateCriticalLowAlarm(
       state: _alarmState,
       mmol: snapshot.entry.mmol,
+      timestampIsoUtc: snapshot.entry.timestamp,
       now: nowLocal,
     );
     if (critical.shouldTrigger) {
@@ -265,6 +266,7 @@ class AppState extends ChangeNotifier {
     final predictedLow = evaluatePredictedLowAlarm(
       state: _alarmState,
       predictedMmol: predictedMmol,
+      timestampIsoUtc: snapshot.entry.timestamp,
       now: nowLocal,
       predictionCanAlarm: _prediction?.quality.canAlarm ?? false,
       isEnabled: _alarmSettings.predictionAlarmEnabled,
@@ -294,9 +296,13 @@ class AppState extends ChangeNotifier {
       now: nowLocal,
       isEnabled: _alarmSettings.enabled,
     );
+    final noDataDecision = evaluateNoDataAlarm(
+      state: _alarmState,
+      now: nowLocal,
+      isNoData: _alarmSettings.staleAlarmEnabled && isStale,
+    );
 
-    final shouldAlarm =
-        decision.shouldTrigger || (_alarmSettings.staleAlarmEnabled && isStale);
+    final shouldAlarm = decision.shouldTrigger || noDataDecision.shouldTrigger;
 
     if (shouldAlarm) {
       _alarmState = _alarmState.copyWith(

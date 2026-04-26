@@ -20,8 +20,8 @@ This project is **not** affiliated with, endorsed by, or supported by Dexcom. Us
 ## Alarm behavior
 
 - Standard low/high alarms are configurable. Defaults are 3.9 mmol/L low and 14.0 mmol/L high.
-- Standard alarms repeat no more than once per minute while glucose remains out of range.
-- Stale-data alarms are enabled by default and trigger when no new reading arrives for more than 15 minutes.
+- Standard alarms sound again only when Dexcom returns a new reading that is still out of range.
+- Stale/no-data alarms are enabled by default, trigger when no new reading arrives for more than 15 minutes, and repeat no more than every 5 minutes until data returns.
 - Critical low alarms at or below 3.1 mmol/L always run, even if standard alarms are disabled.
 - Predicted low alarms are configurable and only run when the selected prediction algorithm reports good-quality recent data, using a distinct short-beep pattern.
 - Background alarms require Android notification permission and can be affected by OEM battery restrictions.

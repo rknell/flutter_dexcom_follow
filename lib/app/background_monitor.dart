@@ -9,7 +9,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'alarm_audio.dart';
 import 'alarm_logic.dart'
-    show AlarmState, evaluatePredictedLowAlarm, isDataStale, kCriticalLowMmol;
+    show
+        AlarmPolicy,
+        AlarmState,
+        evaluateAlarm,
+        evaluateCriticalLowAlarm,
+        evaluateNoDataAlarm,
+        evaluatePredictedLowAlarm,
+        isDataStale,
+        kCriticalLowMmol,
+        kNoDataRepeatInterval;
 import 'alarm_settings.dart';
 import 'credentials.dart';
 import 'glucose_format.dart';
@@ -216,14 +225,40 @@ class DexcomTaskHandler extends TaskHandler {
       final list = await client.getEstimatedGlucoseValues(
         const LatestGlucoseOptions(maxCount: 8, minutes: 1440),
       );
+      final settings = await _settingsStore.read();
       if (list.isEmpty) {
         await _updateForegroundNotification(
           title: 'Dexcom monitoring',
           text: 'No readings yet — retry in 5 min',
         );
+        final noData = evaluateNoDataAlarm(
+          state: _alarmState,
+          now: nowUtc,
+          isNoData: settings.staleAlarmEnabled,
+        );
+        if (noData.shouldTrigger) {
+          _alarmState = _alarmState.copyWith(lastAlarmedAt: nowUtc);
+          await _notifications.show(
+            2001,
+            'Dexcom out of sync',
+            'No Dexcom readings available',
+            const NotificationDetails(
+              android: AndroidNotificationDetails(
+                BackgroundMonitor._channelId,
+                BackgroundMonitor._channelName,
+                importance: Importance.max,
+                priority: Priority.max,
+                playSound: true,
+                enableVibration: true,
+                category: AndroidNotificationCategory.alarm,
+                fullScreenIntent: true,
+              ),
+            ),
+          );
+          _nextProbeNotBefore = nowUtc.add(kNoDataRepeatInterval);
+        }
         return;
       }
-      final settings = await _settingsStore.read();
       final latest = list.first;
       _scheduleNextProbe(latest);
       final historyOldestFirst = list.reversed.toList(growable: false);
@@ -246,7 +281,12 @@ class DexcomTaskHandler extends TaskHandler {
         }
       }
 
-      final criticalLow = latest.mmol <= kCriticalLowMmol;
+      final critical = evaluateCriticalLowAlarm(
+        state: _alarmState,
+        mmol: latest.mmol,
+        timestampIsoUtc: latest.timestamp,
+        now: nowUtc,
+      );
       final predictionPoints = prediction?.nextPoints;
       final predictedMmol = predictionPoints == null || predictionPoints.isEmpty
           ? null
@@ -254,6 +294,7 @@ class DexcomTaskHandler extends TaskHandler {
       final predictedLow = evaluatePredictedLowAlarm(
         state: _alarmState,
         predictedMmol: predictedMmol,
+        timestampIsoUtc: latest.timestamp,
         now: nowUtc,
         predictionCanAlarm: prediction?.quality.canAlarm ?? false,
         isEnabled: settings.predictionAlarmEnabled,
@@ -261,7 +302,7 @@ class DexcomTaskHandler extends TaskHandler {
       );
       if (!settings.enabled &&
           !settings.staleAlarmEnabled &&
-          !criticalLow &&
+          latest.mmol > kCriticalLowMmol &&
           !predictedLow.shouldTrigger) {
         return;
       }
@@ -275,20 +316,41 @@ class DexcomTaskHandler extends TaskHandler {
             )
           : false;
 
-      final outOfRange =
-          settings.enabled &&
-          (latest.mmol <= settings.minMmol || latest.mmol >= settings.maxMmol);
+      final noData = evaluateNoDataAlarm(
+        state: _alarmState,
+        now: nowUtc,
+        isNoData: stale,
+      );
+      final outOfRange = evaluateAlarm(
+        policy: AlarmPolicy(
+          minMmol: settings.minMmol,
+          maxMmol: settings.maxMmol,
+        ),
+        state: _alarmState,
+        mmol: latest.mmol,
+        timestampIsoUtc: latest.timestamp,
+        now: nowUtc,
+        isEnabled: settings.enabled,
+      );
 
-      if (criticalLow || predictedLow.shouldTrigger || stale || outOfRange) {
+      if (critical.shouldTrigger ||
+          predictedLow.shouldTrigger ||
+          noData.shouldTrigger ||
+          outOfRange.shouldTrigger) {
         final String title;
         final String body;
         final int notifId;
         final arrow = trendArrowForNotification(latest.trend);
-        if (criticalLow) {
+        if (critical.shouldTrigger) {
           notifId = 2002;
           title = 'CRITICAL LOW glucose';
           body =
               '${formatGlucoseEntry(latest, settings.glucoseUnit)} ${settings.glucoseUnit.displayName} $arrow - treat hypoglycaemia urgently';
+          _alarmState = _alarmState.copyWith(
+            lastCriticalLowAlarmAt: nowUtc,
+            lastAlarmedTimestampIsoUtc: latest.timestamp,
+            lastAlarmedAt: nowUtc,
+          );
         } else if (predictedLow.shouldTrigger && predictedMmol != null) {
           notifId = 2003;
           title = 'Predicted low glucose';
@@ -300,19 +362,27 @@ class DexcomTaskHandler extends TaskHandler {
             lastAlarmedAt: nowUtc,
           );
           unawaited(_alarmAudio.playPredictedLowAlarm());
-        } else if (stale) {
+        } else if (noData.shouldTrigger) {
           notifId = 2001;
           title = 'Dexcom out of sync';
           body = 'No new reading for >${settings.staleAfterMinutes} minutes';
+          _alarmState = _alarmState.copyWith(
+            lastAlarmedTimestampIsoUtc: latest.timestamp,
+            lastAlarmedAt: nowUtc,
+          );
         } else {
           notifId = 2001;
           title = 'Glucose alarm';
           body =
               '${formatGlucoseEntry(latest, settings.glucoseUnit)} ${settings.glucoseUnit.displayName} $arrow';
+          _alarmState = _alarmState.copyWith(
+            lastAlarmedTimestampIsoUtc: latest.timestamp,
+            lastAlarmedAt: nowUtc,
+          );
         }
         final playNotificationSound =
             !(predictedLow.shouldTrigger &&
-                !criticalLow &&
+                !critical.shouldTrigger &&
                 predictedMmol != null);
         await _notifications.show(
           notifId,
