@@ -21,7 +21,7 @@ class HomeScreen extends StatelessWidget {
     return Scaffold(
       drawer: const AppDrawer(),
       appBar: AppBar(
-        title: const Text('Dexcom Follow'),
+        title: const Text('Tedcom'),
         actions: [
           IconButton(
             tooltip: 'Refresh',

@@ -10,22 +10,33 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'alarm_logic.dart' show isDataStale, kCriticalLowMmol;
 import 'alarm_settings.dart';
 import 'credentials.dart';
+import 'glucose_format.dart';
+import 'prediction.dart';
 
 /// Unicode arrows for notification text (matches app trend semantics; no icon font in notifications).
 String trendArrowForNotification(Trend trend) => switch (trend) {
-      Trend.doubleup => '↑↑',
-      Trend.singleup => '↑',
-      Trend.fortyfiveup => '↗',
-      Trend.flat => '→',
-      Trend.fortyfivedown => '↘',
-      Trend.singledown => '↓',
-      Trend.doubledown => '↓↓',
-    };
+  Trend.doubleup => '↑↑',
+  Trend.singleup => '↑',
+  Trend.fortyfiveup => '↗',
+  Trend.flat => '→',
+  Trend.fortyfivedown => '↘',
+  Trend.singledown => '↓',
+  Trend.doubledown => '↓↓',
+};
+
+String predictionTextForNotification(PredictionResult? prediction) {
+  final points = prediction?.nextPoints;
+  if (points == null || points.isEmpty) {
+    return '20-min prediction unavailable';
+  }
+  return 'Predicted ${formatMmol(points.last.mmol)} mmol/L in 20 min';
+}
 
 class BackgroundMonitor {
   static const _channelId = 'dexcom_alarm';
   static const _channelName = 'Dexcom alarms';
-  static const _channelDesc = 'Alarms for out-of-range or stale Dexcom readings';
+  static const _channelDesc =
+      'Alarms for out-of-range or stale Dexcom readings';
   static const _kUserPausedKey = 'dexcom.background_monitor_user_paused';
 
   /// When true, the user turned monitoring off in settings; do not auto-start until they turn it on again or signs in again.
@@ -56,10 +67,14 @@ class BackgroundMonitor {
     // Local notifications init
     final notifications = FlutterLocalNotificationsPlugin();
     const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-    await notifications.initialize(const InitializationSettings(android: androidInit));
+    await notifications.initialize(
+      const InitializationSettings(android: androidInit),
+    );
 
     final android = notifications
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     if (android != null) {
       await android.createNotificationChannel(
         const AndroidNotificationChannel(
@@ -93,9 +108,11 @@ class BackgroundMonitor {
 
   static Future<ServiceRequestResult> start() async {
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-      var permission = await FlutterForegroundTask.checkNotificationPermission();
+      var permission =
+          await FlutterForegroundTask.checkNotificationPermission();
       if (permission != NotificationPermission.granted) {
-        permission = await FlutterForegroundTask.requestNotificationPermission();
+        permission =
+            await FlutterForegroundTask.requestNotificationPermission();
       }
       if (permission != NotificationPermission.granted) {
         return ServiceRequestFailure(
@@ -112,7 +129,8 @@ class BackgroundMonitor {
     );
   }
 
-  static Future<ServiceRequestResult> stop() => FlutterForegroundTask.stopService();
+  static Future<ServiceRequestResult> stop() =>
+      FlutterForegroundTask.stopService();
 
   static Future<bool> isRunning() => FlutterForegroundTask.isRunningService;
 }
@@ -175,7 +193,7 @@ class DexcomTaskHandler extends TaskHandler {
       }
 
       final list = await client.getEstimatedGlucoseValues(
-        const LatestGlucoseOptions(maxCount: 1, minutes: 1440),
+        const LatestGlucoseOptions(maxCount: 8, minutes: 1440),
       );
       if (list.isEmpty) {
         await _updateForegroundNotification(
@@ -188,7 +206,10 @@ class DexcomTaskHandler extends TaskHandler {
       final readingTs = latest.timestamp;
       final newDexcomReading = readingTs != _lastForegroundReadingTimestamp;
       if (!_foregroundGlucoseNotificationDismissed || newDexcomReading) {
-        await _syncForegroundNotification(latest);
+        await _syncForegroundNotification(
+          latest: latest,
+          historyNewestFirst: list,
+        );
         _lastForegroundReadingTimestamp = readingTs;
         if (newDexcomReading) {
           _foregroundGlucoseNotificationDismissed = false;
@@ -197,7 +218,8 @@ class DexcomTaskHandler extends TaskHandler {
 
       final settings = await _settingsStore.read();
       final criticalLow = latest.mmol <= kCriticalLowMmol;
-      if (!settings.enabled && !settings.staleAlarmEnabled && !criticalLow) return;
+      if (!settings.enabled && !settings.staleAlarmEnabled && !criticalLow)
+        return;
 
       final nowUtc = DateTime.now().toUtc();
       final readingUtc = DateTime.tryParse(latest.timestamp);
@@ -210,7 +232,8 @@ class DexcomTaskHandler extends TaskHandler {
           : false;
 
       final outOfRange =
-          settings.enabled && (latest.mmol <= settings.minMmol || latest.mmol >= settings.maxMmol);
+          settings.enabled &&
+          (latest.mmol <= settings.minMmol || latest.mmol >= settings.maxMmol);
 
       if (criticalLow || stale || outOfRange) {
         final String title;
@@ -255,30 +278,20 @@ class DexcomTaskHandler extends TaskHandler {
     }
   }
 
-  Future<void> _syncForegroundNotification(GlucoseEntry latest) async {
+  Future<void> _syncForegroundNotification({
+    required GlucoseEntry latest,
+    required List<GlucoseEntry> historyNewestFirst,
+  }) async {
     final arrow = trendArrowForNotification(latest.trend);
     final title = '${latest.mmol.toStringAsFixed(1)} mmol/L $arrow';
-    final readingUtc = DateTime.tryParse(latest.timestamp);
-    final subtitle = readingUtc != null
-        ? _lastReadingMinutesAgo(readingUtc)
-        : 'Last reading time unknown';
+    final historyOldestFirst = historyNewestFirst.reversed.toList(
+      growable: false,
+    );
+    final prediction = predictNext20Minutes(
+      historyOldestFirst: historyOldestFirst,
+    );
+    final subtitle = predictionTextForNotification(prediction);
     await _updateForegroundNotification(title: title, text: subtitle);
-  }
-
-  String _lastReadingMinutesAgo(DateTime readingTime) {
-    final readingUtc = readingTime.isUtc ? readingTime : readingTime.toUtc();
-    var delta = DateTime.now().toUtc().difference(readingUtc);
-    if (delta.isNegative) {
-      delta = Duration.zero;
-    }
-    final minutes = delta.inMinutes;
-    if (minutes < 1) {
-      return 'Last reading less than a minute ago';
-    }
-    if (minutes == 1) {
-      return 'Last reading 1 minute ago';
-    }
-    return 'Last reading $minutes minutes ago';
   }
 
   @override
@@ -305,4 +318,3 @@ class DexcomTaskHandler extends TaskHandler {
     _foregroundGlucoseNotificationDismissed = true;
   }
 }
-
