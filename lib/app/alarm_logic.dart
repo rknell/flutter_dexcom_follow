@@ -5,6 +5,9 @@ const double kCriticalLowMmol = 3.1;
 /// Critical alarms may repeat more often than standard out-of-range alarms.
 const Duration kCriticalLowRepeatInterval = Duration(seconds: 15);
 
+/// Predicted lows are safety alerts, but less urgent than a current critical low.
+const Duration kPredictedLowRepeatInterval = Duration(minutes: 5);
+
 class AlarmDecision {
   final bool shouldTrigger;
   final String? reason;
@@ -28,17 +31,20 @@ class AlarmState {
   final String? lastAlarmedTimestampIsoUtc;
   final DateTime? lastAlarmedAt;
   final DateTime? lastCriticalLowAlarmAt;
+  final DateTime? lastPredictedLowAlarmAt;
 
   const AlarmState({
     this.lastAlarmedTimestampIsoUtc,
     this.lastAlarmedAt,
     this.lastCriticalLowAlarmAt,
+    this.lastPredictedLowAlarmAt,
   });
 
   AlarmState copyWith({
     String? lastAlarmedTimestampIsoUtc,
     DateTime? lastAlarmedAt,
     DateTime? lastCriticalLowAlarmAt,
+    DateTime? lastPredictedLowAlarmAt,
   }) {
     return AlarmState(
       lastAlarmedTimestampIsoUtc:
@@ -46,6 +52,8 @@ class AlarmState {
       lastAlarmedAt: lastAlarmedAt ?? this.lastAlarmedAt,
       lastCriticalLowAlarmAt:
           lastCriticalLowAlarmAt ?? this.lastCriticalLowAlarmAt,
+      lastPredictedLowAlarmAt:
+          lastPredictedLowAlarmAt ?? this.lastPredictedLowAlarmAt,
     );
   }
 }
@@ -91,14 +99,50 @@ AlarmDecision evaluateCriticalLowAlarm({
   required DateTime now,
 }) {
   if (mmol > kCriticalLowMmol) {
-    return const AlarmDecision(shouldTrigger: false, reason: 'above-critical-low');
+    return const AlarmDecision(
+      shouldTrigger: false,
+      reason: 'above-critical-low',
+    );
   }
 
   final lastAt = state.lastCriticalLowAlarmAt;
   if (lastAt != null && now.difference(lastAt) < kCriticalLowRepeatInterval) {
-    return const AlarmDecision(shouldTrigger: false, reason: 'critical-repeat-interval');
+    return const AlarmDecision(
+      shouldTrigger: false,
+      reason: 'critical-repeat-interval',
+    );
   }
 
   return const AlarmDecision(shouldTrigger: true, reason: 'critical-low');
 }
 
+/// Future severe hypoglycaemia band: always evaluated; ignores [AlarmSettings.enabled].
+AlarmDecision evaluatePredictedLowAlarm({
+  required AlarmState state,
+  required double? predictedMmol,
+  required DateTime now,
+}) {
+  if (predictedMmol == null) {
+    return const AlarmDecision(
+      shouldTrigger: false,
+      reason: 'prediction-unavailable',
+    );
+  }
+
+  if (predictedMmol >= kCriticalLowMmol) {
+    return const AlarmDecision(
+      shouldTrigger: false,
+      reason: 'prediction-above-critical-low',
+    );
+  }
+
+  final lastAt = state.lastPredictedLowAlarmAt;
+  if (lastAt != null && now.difference(lastAt) < kPredictedLowRepeatInterval) {
+    return const AlarmDecision(
+      shouldTrigger: false,
+      reason: 'predicted-low-repeat-interval',
+    );
+  }
+
+  return const AlarmDecision(shouldTrigger: true, reason: 'predicted-low');
+}

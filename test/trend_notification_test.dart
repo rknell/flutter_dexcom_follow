@@ -38,4 +38,11 @@ void main() {
       );
     },
   );
+
+  test('FEATURE: predicted-low notification text identifies prediction', () {
+    expect(
+      predictedLowTextForNotification(3.04),
+      'Predicted 3.0 mmol/L in 20 min - predicted low alert',
+    );
+  });
 }

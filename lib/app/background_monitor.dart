@@ -7,7 +7,9 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'alarm_logic.dart' show isDataStale, kCriticalLowMmol;
+import 'alarm_audio.dart';
+import 'alarm_logic.dart'
+    show AlarmState, evaluatePredictedLowAlarm, isDataStale, kCriticalLowMmol;
 import 'alarm_settings.dart';
 import 'credentials.dart';
 import 'glucose_format.dart';
@@ -30,6 +32,10 @@ String predictionTextForNotification(PredictionResult? prediction) {
     return '20-min prediction unavailable';
   }
   return 'Predicted ${formatMmol(points.last.mmol)} mmol/L in 20 min';
+}
+
+String predictedLowTextForNotification(double predictedMmol) {
+  return 'Predicted ${formatMmol(predictedMmol)} mmol/L in 20 min - predicted low alert';
 }
 
 class BackgroundMonitor {
@@ -152,6 +158,8 @@ class DexcomTaskHandler extends TaskHandler {
   final _creds = CredentialStore();
   final _settingsStore = AlarmSettingsStore();
   final _notifications = FlutterLocalNotificationsPlugin();
+  final _alarmAudio = AlarmAudioPlayer();
+  AlarmState _alarmState = const AlarmState();
 
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
@@ -203,12 +211,16 @@ class DexcomTaskHandler extends TaskHandler {
         return;
       }
       final latest = list.first;
+      final historyOldestFirst = list.reversed.toList(growable: false);
+      final prediction = predictNext20Minutes(
+        historyOldestFirst: historyOldestFirst,
+      );
       final readingTs = latest.timestamp;
       final newDexcomReading = readingTs != _lastForegroundReadingTimestamp;
       if (!_foregroundGlucoseNotificationDismissed || newDexcomReading) {
         await _syncForegroundNotification(
           latest: latest,
-          historyNewestFirst: list,
+          prediction: prediction,
         );
         _lastForegroundReadingTimestamp = readingTs;
         if (newDexcomReading) {
@@ -218,10 +230,23 @@ class DexcomTaskHandler extends TaskHandler {
 
       final settings = await _settingsStore.read();
       final criticalLow = latest.mmol <= kCriticalLowMmol;
-      if (!settings.enabled && !settings.staleAlarmEnabled && !criticalLow)
-        return;
-
       final nowUtc = DateTime.now().toUtc();
+      final predictionPoints = prediction?.nextPoints;
+      final predictedMmol = predictionPoints == null || predictionPoints.isEmpty
+          ? null
+          : predictionPoints.last.mmol;
+      final predictedLow = evaluatePredictedLowAlarm(
+        state: _alarmState,
+        predictedMmol: predictedMmol,
+        now: nowUtc,
+      );
+      if (!settings.enabled &&
+          !settings.staleAlarmEnabled &&
+          !criticalLow &&
+          !predictedLow.shouldTrigger) {
+        return;
+      }
+
       final readingUtc = DateTime.tryParse(latest.timestamp);
       final stale = (settings.staleAlarmEnabled && readingUtc != null)
           ? isDataStale(
@@ -235,7 +260,7 @@ class DexcomTaskHandler extends TaskHandler {
           settings.enabled &&
           (latest.mmol <= settings.minMmol || latest.mmol >= settings.maxMmol);
 
-      if (criticalLow || stale || outOfRange) {
+      if (criticalLow || predictedLow.shouldTrigger || stale || outOfRange) {
         final String title;
         final String body;
         final int notifId;
@@ -245,6 +270,17 @@ class DexcomTaskHandler extends TaskHandler {
           title = 'CRITICAL LOW glucose';
           body =
               '${latest.mmol.toStringAsFixed(1)} mmol/L $arrow — treat hypoglycaemia urgently';
+        } else if (predictedLow.shouldTrigger && predictedMmol != null) {
+          notifId = 2003;
+          title = 'Predicted low glucose';
+          body =
+              '${latest.mmol.toStringAsFixed(1)} mmol/L $arrow now. ${predictedLowTextForNotification(predictedMmol)}';
+          _alarmState = _alarmState.copyWith(
+            lastPredictedLowAlarmAt: nowUtc,
+            lastAlarmedTimestampIsoUtc: latest.timestamp,
+            lastAlarmedAt: nowUtc,
+          );
+          unawaited(_alarmAudio.playPredictedLowAlarm());
         } else if (stale) {
           notifId = 2001;
           title = 'Dexcom out of sync';
@@ -254,17 +290,21 @@ class DexcomTaskHandler extends TaskHandler {
           title = 'Glucose alarm';
           body = '${latest.mmol.toStringAsFixed(1)} mmol/L $arrow';
         }
+        final playNotificationSound =
+            !(predictedLow.shouldTrigger &&
+                !criticalLow &&
+                predictedMmol != null);
         await _notifications.show(
           notifId,
           title,
           body,
-          const NotificationDetails(
+          NotificationDetails(
             android: AndroidNotificationDetails(
               BackgroundMonitor._channelId,
               BackgroundMonitor._channelName,
               importance: Importance.max,
               priority: Priority.max,
-              playSound: true,
+              playSound: playNotificationSound,
               enableVibration: true,
               category: AndroidNotificationCategory.alarm,
               fullScreenIntent: true,
@@ -280,16 +320,10 @@ class DexcomTaskHandler extends TaskHandler {
 
   Future<void> _syncForegroundNotification({
     required GlucoseEntry latest,
-    required List<GlucoseEntry> historyNewestFirst,
+    required PredictionResult? prediction,
   }) async {
     final arrow = trendArrowForNotification(latest.trend);
     final title = '${latest.mmol.toStringAsFixed(1)} mmol/L $arrow';
-    final historyOldestFirst = historyNewestFirst.reversed.toList(
-      growable: false,
-    );
-    final prediction = predictNext20Minutes(
-      historyOldestFirst: historyOldestFirst,
-    );
     final subtitle = predictionTextForNotification(prediction);
     await _updateForegroundNotification(title: title, text: subtitle);
   }
@@ -304,6 +338,7 @@ class DexcomTaskHandler extends TaskHandler {
   Future<void> onDestroy(DateTime timestamp, bool isTimeout) async {
     _client?.close();
     _client = null;
+    await _alarmAudio.close();
   }
 
   @override

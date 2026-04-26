@@ -198,6 +198,7 @@ class AppState extends ChangeNotifier {
     _latest = snapshot;
     _error = null;
     _mergeHistory(snapshot.entry);
+    _updatePredictionFromHistory();
     notifyListeners();
 
     final now = DateTime.now().toUtc();
@@ -221,7 +222,26 @@ class AppState extends ChangeNotifier {
       );
       notifyListeners();
       unawaited(_alarmAudio.playPanicAlarm());
-      _recomputePrediction();
+      return;
+    }
+
+    final predictedPoints = _prediction?.nextPoints;
+    final predictedMmol = predictedPoints == null || predictedPoints.isEmpty
+        ? null
+        : predictedPoints.last.mmol;
+    final predictedLow = evaluatePredictedLowAlarm(
+      state: _alarmState,
+      predictedMmol: predictedMmol,
+      now: nowLocal,
+    );
+    if (predictedLow.shouldTrigger) {
+      _alarmState = _alarmState.copyWith(
+        lastPredictedLowAlarmAt: nowLocal,
+        lastAlarmedTimestampIsoUtc: snapshot.entry.timestamp,
+        lastAlarmedAt: nowLocal,
+      );
+      notifyListeners();
+      unawaited(_alarmAudio.playPredictedLowAlarm());
       return;
     }
 
@@ -249,8 +269,6 @@ class AppState extends ChangeNotifier {
       notifyListeners();
       unawaited(_alarmAudio.playAlarm());
     }
-
-    _recomputePrediction();
   }
 
   void _mergeHistory(GlucoseEntry entry) {
@@ -286,14 +304,13 @@ class AppState extends ChangeNotifier {
     _history = next;
   }
 
-  void _recomputePrediction() {
+  void _updatePredictionFromHistory() {
     final hist = _history;
     if (hist.length < 3) {
       _prediction = null;
       return;
     }
     _prediction = predictNext20Minutes(historyOldestFirst: hist);
-    notifyListeners();
   }
 
   Future<void> _disposeRepo() async {

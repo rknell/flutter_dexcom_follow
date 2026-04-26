@@ -31,6 +31,19 @@ Package tests (optional integration tests need `DEXCOM_USERNAME` / `DEXCOM_PASSW
 cd packages/dexcom_share_api && dart pub get && dart test
 ```
 
+## Android releases
+
+Android APK releases are published by the `Android APK Release` GitHub Actions workflow. Run it manually from GitHub Actions; it fetches existing tags, chooses the highest `vMAJOR.MINOR.PATCH+BUILD` tag, increments the patch version and build number, builds a signed APK, pushes the new tag, and attaches the APK to a GitHub release.
+
+The workflow requires these repository secrets:
+
+- `ANDROID_KEYSTORE_BASE64`
+- `ANDROID_KEYSTORE_PASSWORD`
+- `ANDROID_KEY_ALIAS`
+- `ANDROID_KEY_PASSWORD`
+
+Local release signing uses ignored files at `android/release-keystore.jks` and `android/key.properties`.
+
 ## Security and privacy
 
 - Dexcom username and password are stored on-device only when the user enables remembered login (see `lib/app/credentials.dart`).

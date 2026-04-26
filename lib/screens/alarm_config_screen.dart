@@ -131,7 +131,8 @@ class _AlarmConfigScreenState extends State<AlarmConfigScreen> {
                         Text(
                           'Readings at or below ${kCriticalLowMmol.toStringAsFixed(1)} mmol/L always '
                           'play an urgent alarm sound. This cannot be turned off and is separate from '
-                          'the range settings below.',
+                          'the range settings below. If the 20-minute prediction falls below this level, '
+                          'the app plays three short beeps with a pause so you can tell it is a forecast.',
                           style: Theme.of(context)
                               .textTheme
                               .bodyMedium

@@ -158,12 +158,85 @@ void main() {
     });
   });
 
+  group('predicted low alarm', () {
+    test('REGRESSION: below 3.1 triggers predicted-low alert', () {
+      final decision = evaluatePredictedLowAlarm(
+        state: const AlarmState(),
+        predictedMmol: 3.09,
+        now: DateTime.utc(2026, 4, 8, 10, 0, 0),
+      );
+      expect(decision.shouldTrigger, true);
+      expect(decision.reason, 'predicted-low');
+    });
+
+    test(
+      'REGRESSION: at or above 3.1 does not trigger predicted-low alert',
+      () {
+        final atThreshold = evaluatePredictedLowAlarm(
+          state: const AlarmState(),
+          predictedMmol: 3.1,
+          now: DateTime.utc(2026, 4, 8, 10, 0, 0),
+        );
+        final aboveThreshold = evaluatePredictedLowAlarm(
+          state: const AlarmState(),
+          predictedMmol: 3.11,
+          now: DateTime.utc(2026, 4, 8, 10, 0, 0),
+        );
+
+        expect(atThreshold.shouldTrigger, false);
+        expect(atThreshold.reason, 'prediction-above-critical-low');
+        expect(aboveThreshold.shouldTrigger, false);
+        expect(aboveThreshold.reason, 'prediction-above-critical-low');
+      },
+    );
+
+    test(
+      'REGRESSION: predicted-low repeat interval blocks rapid retrigger',
+      () {
+        final decision = evaluatePredictedLowAlarm(
+          state: AlarmState(
+            lastPredictedLowAlarmAt: DateTime.utc(2026, 4, 8, 10, 0, 0),
+          ),
+          predictedMmol: 2.9,
+          now: DateTime.utc(2026, 4, 8, 10, 4, 59),
+        );
+        expect(decision.shouldTrigger, false);
+        expect(decision.reason, 'predicted-low-repeat-interval');
+      },
+    );
+
+    test('FEATURE: predicted-low can retrigger after repeat interval', () {
+      final decision = evaluatePredictedLowAlarm(
+        state: AlarmState(
+          lastPredictedLowAlarmAt: DateTime.utc(2026, 4, 8, 10, 0, 0),
+        ),
+        predictedMmol: 2.8,
+        now: DateTime.utc(2026, 4, 8, 10, 5, 0),
+      );
+      expect(decision.shouldTrigger, true);
+    });
+
+    test('EDGE_CASE: unavailable prediction does not trigger', () {
+      final decision = evaluatePredictedLowAlarm(
+        state: const AlarmState(),
+        predictedMmol: null,
+        now: DateTime.utc(2026, 4, 8, 10, 0, 0),
+      );
+      expect(decision.shouldTrigger, false);
+      expect(decision.reason, 'prediction-unavailable');
+    });
+  });
+
   group('stale detection', () {
     test('REGRESSION: stale after threshold', () {
       final now = DateTime.utc(2026, 4, 8, 10, 15, 1);
       final reading = DateTime.utc(2026, 4, 8, 10, 0, 0);
       expect(
-        isDataStale(now: now, readingTimeUtc: reading, staleAfter: const Duration(minutes: 15)),
+        isDataStale(
+          now: now,
+          readingTimeUtc: reading,
+          staleAfter: const Duration(minutes: 15),
+        ),
         true,
       );
     });
@@ -172,10 +245,13 @@ void main() {
       final now = DateTime.utc(2026, 4, 8, 10, 15, 0);
       final reading = DateTime.utc(2026, 4, 8, 10, 0, 0);
       expect(
-        isDataStale(now: now, readingTimeUtc: reading, staleAfter: const Duration(minutes: 15)),
+        isDataStale(
+          now: now,
+          readingTimeUtc: reading,
+          staleAfter: const Duration(minutes: 15),
+        ),
         false,
       );
     });
   });
 }
-

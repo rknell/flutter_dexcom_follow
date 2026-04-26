@@ -7,7 +7,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 /// Native channel: Android temporarily raises [STREAM_ALARM] volume (see MainActivity).
-const _kAlarmAudioChannel = MethodChannel('com.example.flutter_dexcom_follow/alarm_audio');
+const _kAlarmAudioChannel = MethodChannel(
+  'com.example.flutter_dexcom_follow/alarm_audio',
+);
 
 class AlarmAudioPlayer {
   AlarmAudioPlayer({this.sampleRate = 44100, this.numChannels = 1});
@@ -22,19 +24,37 @@ class AlarmAudioPlayer {
   Future<void> open() async {}
   Future<void> close() async => stop();
 
-  Future<void> playAlarm({Duration duration = const Duration(seconds: 6)}) async {
+  Future<void> playAlarm({
+    Duration duration = const Duration(seconds: 6),
+  }) async {
     if (_isPlaying) return;
     await _startPlayback(
-      pcmBuilder: () => _buildAlarmPcm16(duration: duration, sampleRate: sampleRate),
+      pcmBuilder: () =>
+          _buildAlarmPcm16(duration: duration, sampleRate: sampleRate),
       duration: duration,
     );
   }
 
   /// Interrupts a normal alarm if needed. Used for non-disableable critical low BG.
-  Future<void> playPanicAlarm({Duration duration = const Duration(seconds: 8)}) async {
+  Future<void> playPanicAlarm({
+    Duration duration = const Duration(seconds: 8),
+  }) async {
     await stop();
     await _startPlayback(
-      pcmBuilder: () => _buildPanicAlarmPcm16(duration: duration, sampleRate: sampleRate),
+      pcmBuilder: () =>
+          _buildPanicAlarmPcm16(duration: duration, sampleRate: sampleRate),
+      duration: duration,
+    );
+  }
+
+  Future<void> playPredictedLowAlarm({
+    Duration duration = const Duration(seconds: 6),
+  }) async {
+    await _startPlayback(
+      pcmBuilder: () => _buildPredictedLowAlarmPcm16(
+        duration: duration,
+        sampleRate: sampleRate,
+      ),
       duration: duration,
     );
   }
@@ -91,9 +111,7 @@ class AlarmAudioPlayer {
       case TargetPlatform.iOS:
         await _player.setAudioContext(
           AudioContext(
-            iOS: AudioContextIOS(
-              category: AVAudioSessionCategory.playback,
-            ),
+            iOS: AudioContextIOS(category: AVAudioSessionCategory.playback),
           ),
         );
         _audioContextApplied = true;
@@ -119,7 +137,10 @@ class AlarmAudioPlayer {
   }
 }
 
-Int16List _buildAlarmPcm16({required Duration duration, required int sampleRate}) {
+Int16List _buildAlarmPcm16({
+  required Duration duration,
+  required int sampleRate,
+}) {
   final totalFrames = (duration.inMilliseconds * sampleRate / 1000).round();
   final out = Int16List(totalFrames);
 
@@ -155,7 +176,10 @@ Int16List _buildAlarmPcm16({required Duration duration, required int sampleRate}
   return out;
 }
 
-Int16List _buildPanicAlarmPcm16({required Duration duration, required int sampleRate}) {
+Int16List _buildPanicAlarmPcm16({
+  required Duration duration,
+  required int sampleRate,
+}) {
   final totalFrames = (duration.inMilliseconds * sampleRate / 1000).round();
   final out = Int16List(totalFrames);
 
@@ -197,6 +221,39 @@ Int16List _buildPanicAlarmPcm16({required Duration duration, required int sample
       sampleRate: sampleRate,
     );
     writeFrame += (sampleRate * gapMs / 1000).round();
+  }
+
+  return out;
+}
+
+Int16List _buildPredictedLowAlarmPcm16({
+  required Duration duration,
+  required int sampleRate,
+}) {
+  final totalFrames = (duration.inMilliseconds * sampleRate / 1000).round();
+  final out = Int16List(totalFrames);
+
+  // Predicted-low pattern: three short beeps, then a pause.
+  final beepMs = 90;
+  final gapMs = 80;
+  final pauseMs = 720;
+  final blockMs = beepMs + gapMs + beepMs + gapMs + beepMs + pauseMs;
+  final totalBlocks = max(1, (duration.inMilliseconds / blockMs).ceil());
+
+  var writeFrame = 0;
+  for (var b = 0; b < totalBlocks && writeFrame < totalFrames; b++) {
+    for (var i = 0; i < 3 && writeFrame < totalFrames; i++) {
+      writeFrame = _mixChirp(
+        out,
+        startFrame: writeFrame,
+        ms: beepMs,
+        startHz: 1040,
+        endHz: 1040,
+        amplitude: 0.58,
+        sampleRate: sampleRate,
+      );
+      writeFrame += (sampleRate * (i == 2 ? pauseMs : gapMs) / 1000).round();
+    }
   }
 
   return out;
@@ -274,6 +331,7 @@ Uint8List _pcm16ToWavBytes(
 }
 
 Uint8List _ascii(String s) => Uint8List.fromList(s.codeUnits);
-Uint8List _u16le(int v) => Uint8List(2)..buffer.asByteData().setUint16(0, v, Endian.little);
-Uint8List _u32le(int v) => Uint8List(4)..buffer.asByteData().setUint32(0, v, Endian.little);
-
+Uint8List _u16le(int v) =>
+    Uint8List(2)..buffer.asByteData().setUint16(0, v, Endian.little);
+Uint8List _u32le(int v) =>
+    Uint8List(4)..buffer.asByteData().setUint32(0, v, Endian.little);

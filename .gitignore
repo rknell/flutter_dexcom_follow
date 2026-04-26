@@ -5,7 +5,9 @@
 
 # Certificates / signing material at repo root
 *.jks
+*.jks.base64
 *.keystore
+*.keystore.base64
 *.pem
 
 # Miscellaneous
