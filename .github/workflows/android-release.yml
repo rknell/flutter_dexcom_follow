@@ -67,7 +67,7 @@ jobs:
             --build-name "${{ steps.version.outputs.build_name }}" \
             --build-number "${{ steps.version.outputs.build_number }}"
           cp build/app/outputs/flutter-apk/app-release.apk \
-            "build/app/outputs/flutter-apk/teddycom-${{ steps.version.outputs.version }}.apk"
+            "build/app/outputs/flutter-apk/teddycom-${{ steps.version.outputs.build_name }}.apk"
 
       - name: Create and push release tag
         env:
@@ -86,9 +86,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
-          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          RELEASE_BUILD_NAME: ${{ steps.version.outputs.build_name }}
+          RELEASE_BUILD_NUMBER: ${{ steps.version.outputs.build_number }}
         run: |
+          {
+            printf 'Android package: com.rknell.teddycom\n'
+            printf 'Android version code: %s\n\n' "$RELEASE_BUILD_NUMBER"
+            printf 'Obtainium setup:\n'
+            printf -- '- Source URL: https://github.com/rknell/flutter_dexcom_follow\n'
+            printf -- '- Source: GitHub\n'
+            printf -- '- APK filter regex: ^teddycom-.*\\.apk$\n'
+          } > release-notes.md
+
           gh release create "$RELEASE_TAG" \
-            "build/app/outputs/flutter-apk/teddycom-$RELEASE_VERSION.apk" \
-            --title "Teddycom $RELEASE_VERSION" \
-            --generate-notes
+            "build/app/outputs/flutter-apk/teddycom-$RELEASE_BUILD_NAME.apk" \
+            --title "Teddycom $RELEASE_BUILD_NAME" \
+            --notes-file release-notes.md

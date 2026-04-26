@@ -8,7 +8,7 @@ import 'package:flutter/services.dart';
 
 /// Native channel: Android temporarily raises [STREAM_ALARM] volume (see MainActivity).
 const _kAlarmAudioChannel = MethodChannel(
-  'com.example.flutter_dexcom_follow/alarm_audio',
+  'com.rknell.teddycom/alarm_audio',
 );
 
 class AlarmAudioPlayer {

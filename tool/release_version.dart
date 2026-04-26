@@ -62,7 +62,21 @@ class AndroidReleaseVersion implements Comparable<AndroidReleaseVersion> {
 
   String get fullVersion => '$buildName+$buildNumber';
 
-  String get tagName => 'v$fullVersion';
+  String get tagName => 'v$buildName';
+
+  int compareReleaseNameTo(AndroidReleaseVersion other) {
+    final majorComparison = major.compareTo(other.major);
+    if (majorComparison != 0) {
+      return majorComparison;
+    }
+
+    final minorComparison = minor.compareTo(other.minor);
+    if (minorComparison != 0) {
+      return minorComparison;
+    }
+
+    return patch.compareTo(other.patch);
+  }
 
   @override
   int compareTo(AndroidReleaseVersion other) {
@@ -103,6 +117,13 @@ AndroidReleaseVersion? highestTaggedVersion(Iterable<String> rawTags) {
   return highest;
 }
 
+List<AndroidReleaseVersion> taggedVersions(Iterable<String> rawTags) {
+  return rawTags
+      .map(AndroidReleaseVersion.parse)
+      .whereType<AndroidReleaseVersion>()
+      .toList(growable: false);
+}
+
 AndroidReleaseVersion pubspecVersion(String pubspecYaml) {
   final match = RegExp(
     r'^version:\s*(\S+)\s*$',
@@ -126,7 +147,48 @@ AndroidReleaseVersion nextAndroidReleaseVersion({
   required Iterable<String> tags,
   required String pubspecYaml,
 }) {
+  final parsedTags = taggedVersions(tags);
   final taggedVersion = highestTaggedVersion(tags);
-  final baseVersion = taggedVersion ?? pubspecVersion(pubspecYaml);
-  return baseVersion.nextPatchRelease();
+  final pubspec = pubspecVersion(pubspecYaml);
+  final baseVersion = taggedVersion ?? pubspec;
+  final nextPatch = baseVersion.nextPatchRelease();
+  final explicitlyNumberedTags = parsedTags
+      .where((version) => version.buildNumber > 0)
+      .toList(growable: false);
+  final nextBuildNumber = explicitlyNumberedTags.isEmpty
+      ? pubspec.buildNumber + parsedTags.length + 1
+      : _nextBuildNumberFromTags(
+          parsedTags: parsedTags,
+          explicitlyNumberedTags: explicitlyNumberedTags,
+        );
+
+  return AndroidReleaseVersion(
+    major: nextPatch.major,
+    minor: nextPatch.minor,
+    patch: nextPatch.patch,
+    buildNumber: nextBuildNumber,
+  );
+}
+
+int _nextBuildNumberFromTags({
+  required List<AndroidReleaseVersion> parsedTags,
+  required List<AndroidReleaseVersion> explicitlyNumberedTags,
+}) {
+  final latestNumberedTag = explicitlyNumberedTags.reduce((highest, version) {
+    final releaseComparison = version.compareReleaseNameTo(highest);
+    if (releaseComparison != 0) {
+      return releaseComparison > 0 ? version : highest;
+    }
+
+    return version.buildNumber > highest.buildNumber ? version : highest;
+  });
+  final cleanTagsAfterLatestNumberedTag = parsedTags.where(
+    (version) =>
+        version.buildNumber == 0 &&
+        version.compareReleaseNameTo(latestNumberedTag) > 0,
+  );
+
+  return latestNumberedTag.buildNumber +
+      cleanTagsAfterLatestNumberedTag.length +
+      1;
 }

@@ -33,7 +33,9 @@ cd packages/dexcom_share_api && dart pub get && dart test
 
 ## Android releases
 
-Android APK releases are published by the `Android APK Release` GitHub Actions workflow. Run it manually from GitHub Actions; it fetches existing tags, chooses the highest `vMAJOR.MINOR.PATCH+BUILD` tag, increments the patch version and build number, builds a signed APK, pushes the new tag, and attaches the APK to a GitHub release.
+Android APK releases are published by the `Android APK Release` GitHub Actions workflow. Run it manually from GitHub Actions; it fetches existing release tags, increments the patch version and Android build number, builds a signed APK, pushes the new tag, and attaches the APK to a GitHub release.
+
+Release tags use the same version string Android reports to update managers, for example `v1.2.3`. The Android `versionCode` still increments on every release so APK upgrades install cleanly.
 
 The workflow requires these repository secrets:
 
@@ -43,6 +45,20 @@ The workflow requires these repository secrets:
 - `ANDROID_KEY_PASSWORD`
 
 Local release signing uses ignored files at `android/release-keystore.jks` and `android/key.properties`.
+
+### Obtainium updates
+
+Teddycom is distributed as a GitHub release APK for [Obtainium](https://obtainium.imranr.dev/).
+
+On each Android device:
+
+1. Install Obtainium.
+2. Add `https://github.com/rknell/flutter_dexcom_follow`.
+3. Use the GitHub source if Obtainium asks.
+4. Set the APK filter regex to `^teddycom-.*\.apk$`.
+5. Install Teddycom from Obtainium once.
+
+After that, new GitHub releases should be detected by Obtainium and installed from the release APK. The Android package ID is `com.rknell.teddycom`; keep that ID and signing key stable or Android will treat a future build as a different app.
 
 ## Security and privacy
 

@@ -1,4 +1,4 @@
-package com.example.flutter_dexcom_follow
+package com.rknell.teddycom
 
 import android.content.Context
 import android.media.AudioManager
@@ -13,7 +13,7 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
-            "com.example.flutter_dexcom_follow/alarm_audio",
+            "com.rknell.teddycom/alarm_audio",
         ).setMethodCallHandler { call, result ->
             when (call.method) {
                 "boostAlarmVolume" -> {
