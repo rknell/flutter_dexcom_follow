@@ -110,7 +110,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             const SizedBox(height: 10),
                             Text(
-                              'Sign in to view your latest glucose reading.',
+                              'Use your personal Dexcom credentials to view your latest glucose reading.',
                               textAlign: TextAlign.center,
                               style: Theme.of(context).textTheme.bodyLarge
                                   ?.copyWith(
