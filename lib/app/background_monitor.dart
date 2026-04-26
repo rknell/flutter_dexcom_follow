@@ -210,10 +210,13 @@ class DexcomTaskHandler extends TaskHandler {
         );
         return;
       }
+      final settings = await _settingsStore.read();
       final latest = list.first;
       final historyOldestFirst = list.reversed.toList(growable: false);
       final prediction = predictNext20Minutes(
         historyOldestFirst: historyOldestFirst,
+        algorithm: settings.predictionAlgorithm,
+        nowUtc: DateTime.now().toUtc(),
       );
       final readingTs = latest.timestamp;
       final newDexcomReading = readingTs != _lastForegroundReadingTimestamp;
@@ -228,7 +231,6 @@ class DexcomTaskHandler extends TaskHandler {
         }
       }
 
-      final settings = await _settingsStore.read();
       final criticalLow = latest.mmol <= kCriticalLowMmol;
       final nowUtc = DateTime.now().toUtc();
       final predictionPoints = prediction?.nextPoints;
@@ -239,6 +241,7 @@ class DexcomTaskHandler extends TaskHandler {
         state: _alarmState,
         predictedMmol: predictedMmol,
         now: nowUtc,
+        predictionCanAlarm: prediction?.quality.canAlarm ?? false,
       );
       if (!settings.enabled &&
           !settings.staleAlarmEnabled &&

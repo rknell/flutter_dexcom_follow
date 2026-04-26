@@ -8,6 +8,9 @@ const Duration kCriticalLowRepeatInterval = Duration(seconds: 15);
 /// Predicted lows are safety alerts, but less urgent than a current critical low.
 const Duration kPredictedLowRepeatInterval = Duration(minutes: 5);
 
+/// Keep predicted-low alarms below the one-decimal display boundary for 3.1.
+const double kPredictedLowAlarmMmol = kCriticalLowMmol - 0.05;
+
 class AlarmDecision {
   final bool shouldTrigger;
   final String? reason;
@@ -121,6 +124,7 @@ AlarmDecision evaluatePredictedLowAlarm({
   required AlarmState state,
   required double? predictedMmol,
   required DateTime now,
+  bool predictionCanAlarm = true,
 }) {
   if (predictedMmol == null) {
     return const AlarmDecision(
@@ -129,7 +133,14 @@ AlarmDecision evaluatePredictedLowAlarm({
     );
   }
 
-  if (predictedMmol >= kCriticalLowMmol) {
+  if (!predictionCanAlarm) {
+    return const AlarmDecision(
+      shouldTrigger: false,
+      reason: 'prediction-quality-insufficient',
+    );
+  }
+
+  if (predictedMmol > kPredictedLowAlarmMmol) {
     return const AlarmDecision(
       shouldTrigger: false,
       reason: 'prediction-above-critical-low',

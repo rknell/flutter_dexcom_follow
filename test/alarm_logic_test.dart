@@ -159,19 +159,27 @@ void main() {
   });
 
   group('predicted low alarm', () {
-    test('REGRESSION: below 3.1 triggers predicted-low alert', () {
-      final decision = evaluatePredictedLowAlarm(
-        state: const AlarmState(),
-        predictedMmol: 3.09,
-        now: DateTime.utc(2026, 4, 8, 10, 0, 0),
-      );
-      expect(decision.shouldTrigger, true);
-      expect(decision.reason, 'predicted-low');
-    });
+    test(
+      'REGRESSION: below display threshold triggers predicted-low alert',
+      () {
+        final decision = evaluatePredictedLowAlarm(
+          state: const AlarmState(),
+          predictedMmol: 3.04,
+          now: DateTime.utc(2026, 4, 8, 10, 0, 0),
+        );
+        expect(decision.shouldTrigger, true);
+        expect(decision.reason, 'predicted-low');
+      },
+    );
 
     test(
-      'REGRESSION: at or above 3.1 does not trigger predicted-low alert',
+      'REGRESSION: near or above 3.1 display boundary does not trigger predicted-low alert',
       () {
+        final nearThreshold = evaluatePredictedLowAlarm(
+          state: const AlarmState(),
+          predictedMmol: 3.06,
+          now: DateTime.utc(2026, 4, 8, 10, 0, 0),
+        );
         final atThreshold = evaluatePredictedLowAlarm(
           state: const AlarmState(),
           predictedMmol: 3.1,
@@ -183,10 +191,26 @@ void main() {
           now: DateTime.utc(2026, 4, 8, 10, 0, 0),
         );
 
+        expect(nearThreshold.shouldTrigger, false);
+        expect(nearThreshold.reason, 'prediction-above-critical-low');
         expect(atThreshold.shouldTrigger, false);
         expect(atThreshold.reason, 'prediction-above-critical-low');
         expect(aboveThreshold.shouldTrigger, false);
         expect(aboveThreshold.reason, 'prediction-above-critical-low');
+      },
+    );
+
+    test(
+      'SAFETY: insufficient prediction quality blocks predicted-low alert',
+      () {
+        final decision = evaluatePredictedLowAlarm(
+          state: const AlarmState(),
+          predictedMmol: 2.8,
+          now: DateTime.utc(2026, 4, 8, 10, 0, 0),
+          predictionCanAlarm: false,
+        );
+        expect(decision.shouldTrigger, false);
+        expect(decision.reason, 'prediction-quality-insufficient');
       },
     );
 

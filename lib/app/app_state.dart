@@ -17,8 +17,8 @@ class AppState extends ChangeNotifier {
   AppState({
     required CredentialStore credentialStore,
     AlarmSettingsStore? alarmSettingsStore,
-  })  : _credentialStore = credentialStore,
-        _alarmSettingsStore = alarmSettingsStore ?? AlarmSettingsStore();
+  }) : _credentialStore = credentialStore,
+       _alarmSettingsStore = alarmSettingsStore ?? AlarmSettingsStore();
 
   final CredentialStore _credentialStore;
   final AlarmSettingsStore _alarmSettingsStore;
@@ -65,7 +65,11 @@ class AppState extends ChangeNotifier {
     if (saved != null) {
       _rememberMe = saved.rememberMe;
       _username = saved.username;
-      await login(username: saved.username, password: saved.password, rememberMe: saved.rememberMe);
+      await login(
+        username: saved.username,
+        password: saved.password,
+        rememberMe: saved.rememberMe,
+      );
       return;
     }
     _phase = AppPhase.loggedOut;
@@ -102,7 +106,11 @@ class AppState extends ChangeNotifier {
 
       if (rememberMe) {
         await _credentialStore.write(
-          SavedCredentials(username: username, password: password, rememberMe: rememberMe),
+          SavedCredentials(
+            username: username,
+            password: password,
+            rememberMe: rememberMe,
+          ),
         );
         await BackgroundMonitor.setUserPaused(false);
         unawaited(BackgroundMonitor.tryAutoStartIfEligible());
@@ -148,6 +156,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> updateAlarmSettings(AlarmSettings next) async {
     _alarmSettings = next;
+    _updatePredictionFromHistory();
     await _alarmSettingsStore.write(next);
     notifyListeners();
   }
@@ -176,9 +185,16 @@ class AppState extends ChangeNotifier {
     try {
       final list = await repo.fetchHistory(minutes: 24 * 60, maxCount: 288);
       // Dexcom returns newest-first; UI wants oldest-first.
-      final ordered = list.toList(growable: false).reversed.toList(growable: false);
+      final ordered = list
+          .toList(growable: false)
+          .reversed
+          .toList(growable: false);
       _history = ordered;
-      _prediction = predictNext20Minutes(historyOldestFirst: _history);
+      _prediction = predictNext20Minutes(
+        historyOldestFirst: _history,
+        algorithm: _alarmSettings.predictionAlgorithm,
+        nowUtc: DateTime.now().toUtc(),
+      );
     } catch (e) {
       _historyError = e.toString();
     } finally {
@@ -206,7 +222,11 @@ class AppState extends ChangeNotifier {
     final staleAfter = Duration(minutes: _alarmSettings.staleAfterMinutes);
     final isStale = readingTimeUtc == null
         ? false
-        : isDataStale(now: now, readingTimeUtc: readingTimeUtc, staleAfter: staleAfter);
+        : isDataStale(
+            now: now,
+            readingTimeUtc: readingTimeUtc,
+            staleAfter: staleAfter,
+          );
 
     final nowLocal = DateTime.now();
     final critical = evaluateCriticalLowAlarm(
@@ -233,6 +253,7 @@ class AppState extends ChangeNotifier {
       state: _alarmState,
       predictedMmol: predictedMmol,
       now: nowLocal,
+      predictionCanAlarm: _prediction?.quality.canAlarm ?? false,
     );
     if (predictedLow.shouldTrigger) {
       _alarmState = _alarmState.copyWith(
@@ -259,7 +280,8 @@ class AppState extends ChangeNotifier {
       isEnabled: _alarmSettings.enabled,
     );
 
-    final shouldAlarm = decision.shouldTrigger || (_alarmSettings.staleAlarmEnabled && isStale);
+    final shouldAlarm =
+        decision.shouldTrigger || (_alarmSettings.staleAlarmEnabled && isStale);
 
     if (shouldAlarm) {
       _alarmState = _alarmState.copyWith(
@@ -310,7 +332,11 @@ class AppState extends ChangeNotifier {
       _prediction = null;
       return;
     }
-    _prediction = predictNext20Minutes(historyOldestFirst: hist);
+    _prediction = predictNext20Minutes(
+      historyOldestFirst: hist,
+      algorithm: _alarmSettings.predictionAlgorithm,
+      nowUtc: DateTime.now().toUtc(),
+    );
   }
 
   Future<void> _disposeRepo() async {
@@ -330,4 +356,3 @@ class AppState extends ChangeNotifier {
     super.dispose();
   }
 }
-

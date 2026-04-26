@@ -25,7 +25,16 @@ void main() {
           PredictionPoint(at: DateTime.utc(2026, 4, 8, 10, 20), mmol: 6.1),
         ],
         slopeMmolPerMinute: 0.02,
-        method: 'linear_regression',
+        algorithm: PredictionAlgorithm.linearRegression,
+        quality: const PredictionQuality(
+          status: PredictionQualityStatus.good,
+          pointCount: 4,
+          windowMinutes: 15,
+          maxGapMinutes: 5,
+          latestAgeMinutes: 1,
+          residualStdDevMmol: 0,
+          canAlarm: true,
+        ),
       );
 
       expect(

@@ -1,11 +1,14 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'prediction.dart';
+
 class AlarmSettings {
   final bool enabled;
   final double minMmol;
   final double maxMmol;
   final bool staleAlarmEnabled;
   final int staleAfterMinutes;
+  final PredictionAlgorithm predictionAlgorithm;
 
   const AlarmSettings({
     required this.enabled,
@@ -13,6 +16,7 @@ class AlarmSettings {
     required this.maxMmol,
     required this.staleAlarmEnabled,
     required this.staleAfterMinutes,
+    required this.predictionAlgorithm,
   });
 
   AlarmSettings copyWith({
@@ -21,6 +25,7 @@ class AlarmSettings {
     double? maxMmol,
     bool? staleAlarmEnabled,
     int? staleAfterMinutes,
+    PredictionAlgorithm? predictionAlgorithm,
   }) {
     return AlarmSettings(
       enabled: enabled ?? this.enabled,
@@ -28,6 +33,7 @@ class AlarmSettings {
       maxMmol: maxMmol ?? this.maxMmol,
       staleAlarmEnabled: staleAlarmEnabled ?? this.staleAlarmEnabled,
       staleAfterMinutes: staleAfterMinutes ?? this.staleAfterMinutes,
+      predictionAlgorithm: predictionAlgorithm ?? this.predictionAlgorithm,
     );
   }
 }
@@ -38,6 +44,7 @@ class AlarmSettingsStore {
   static const _kMax = 'alarm.maxMmol';
   static const _kStaleEnabled = 'alarm.stale.enabled';
   static const _kStaleAfterMinutes = 'alarm.stale.afterMinutes';
+  static const _kPredictionAlgorithm = 'prediction.algorithm';
 
   static const AlarmSettings defaults = AlarmSettings(
     enabled: true,
@@ -45,6 +52,7 @@ class AlarmSettingsStore {
     maxMmol: 14.0,
     staleAlarmEnabled: true,
     staleAfterMinutes: 15,
+    predictionAlgorithm: PredictionAlgorithm.weightedLinearRegression,
   );
 
   Future<AlarmSettings> read() async {
@@ -52,14 +60,20 @@ class AlarmSettingsStore {
     final enabled = prefs.getBool(_kEnabled) ?? defaults.enabled;
     final min = prefs.getDouble(_kMin) ?? defaults.minMmol;
     final max = prefs.getDouble(_kMax) ?? defaults.maxMmol;
-    final staleEnabled = prefs.getBool(_kStaleEnabled) ?? defaults.staleAlarmEnabled;
-    final staleAfter = prefs.getInt(_kStaleAfterMinutes) ?? defaults.staleAfterMinutes;
+    final staleEnabled =
+        prefs.getBool(_kStaleEnabled) ?? defaults.staleAlarmEnabled;
+    final staleAfter =
+        prefs.getInt(_kStaleAfterMinutes) ?? defaults.staleAfterMinutes;
+    final predictionAlgorithm = PredictionAlgorithmLabel.fromStorageValue(
+      prefs.getString(_kPredictionAlgorithm),
+    );
     return AlarmSettings(
       enabled: enabled,
       minMmol: min,
       maxMmol: max,
       staleAlarmEnabled: staleEnabled,
       staleAfterMinutes: staleAfter,
+      predictionAlgorithm: predictionAlgorithm,
     );
   }
 
@@ -70,6 +84,9 @@ class AlarmSettingsStore {
     await prefs.setDouble(_kMax, s.maxMmol);
     await prefs.setBool(_kStaleEnabled, s.staleAlarmEnabled);
     await prefs.setInt(_kStaleAfterMinutes, s.staleAfterMinutes);
+    await prefs.setString(
+      _kPredictionAlgorithm,
+      s.predictionAlgorithm.storageValue,
+    );
   }
 }
-

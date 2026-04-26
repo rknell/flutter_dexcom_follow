@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../app/alarm_logic.dart' show kCriticalLowMmol;
 import '../app/app_state.dart';
 import '../app/background_monitor.dart';
+import '../app/prediction.dart';
 
 class AlarmConfigScreen extends StatefulWidget {
   const AlarmConfigScreen({super.key});
@@ -54,9 +55,7 @@ class _AlarmConfigScreenState extends State<AlarmConfigScreen> {
                           children: [
                             Text(
                               'Background monitoring (Android)',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
+                              style: Theme.of(context).textTheme.titleMedium
                                   ?.copyWith(fontWeight: FontWeight.w800),
                             ),
                             const SizedBox(height: 8),
@@ -64,10 +63,12 @@ class _AlarmConfigScreenState extends State<AlarmConfigScreen> {
                               running
                                   ? 'Running as a foreground service (persistent notification). Restarts after reboot while you stay signed in.'
                                   : 'Off. Turn this on to alarm when the app is closed. Monitoring also starts automatically when you sign in (saved login).',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyMedium
-                                  ?.copyWith(color: scheme.onSurface.withValues(alpha: 0.75)),
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(
+                                    color: scheme.onSurface.withValues(
+                                      alpha: 0.75,
+                                    ),
+                                  ),
                             ),
                             const SizedBox(height: 12),
                             FilledButton.icon(
@@ -78,14 +79,21 @@ class _AlarmConfigScreenState extends State<AlarmConfigScreen> {
                                       try {
                                         await BackgroundMonitor.ensureInitialized();
                                         if (running) {
-                                          await BackgroundMonitor.setUserPaused(true);
+                                          await BackgroundMonitor.setUserPaused(
+                                            true,
+                                          );
                                           await BackgroundMonitor.stop();
                                         } else {
-                                          await BackgroundMonitor.setUserPaused(false);
-                                          final result = await BackgroundMonitor.start();
+                                          await BackgroundMonitor.setUserPaused(
+                                            false,
+                                          );
+                                          final result =
+                                              await BackgroundMonitor.start();
                                           if (context.mounted &&
                                               result is ServiceRequestFailure) {
-                                            ScaffoldMessenger.of(context).showSnackBar(
+                                            ScaffoldMessenger.of(
+                                              context,
+                                            ).showSnackBar(
                                               SnackBar(
                                                 content: Text(
                                                   'Could not start monitoring: ${result.error}',
@@ -103,8 +111,16 @@ class _AlarmConfigScreenState extends State<AlarmConfigScreen> {
                                         }
                                       }
                                     },
-                              icon: Icon(running ? Icons.stop_circle_outlined : Icons.play_circle_outline),
-                              label: Text(running ? 'Stop monitoring' : 'Start monitoring'),
+                              icon: Icon(
+                                running
+                                    ? Icons.stop_circle_outlined
+                                    : Icons.play_circle_outline,
+                              ),
+                              label: Text(
+                                running
+                                    ? 'Stop monitoring'
+                                    : 'Start monitoring',
+                              ),
                             ),
                           ],
                         ),
@@ -114,7 +130,47 @@ class _AlarmConfigScreenState extends State<AlarmConfigScreen> {
                 ),
                 const SizedBox(height: 12),
                 Card(
-                  color: Theme.of(context).colorScheme.errorContainer.withValues(alpha: 0.35),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'Prediction',
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<PredictionAlgorithm>(
+                          initialValue: settings.predictionAlgorithm,
+                          decoration: const InputDecoration(
+                            labelText: 'Algorithm',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: PredictionAlgorithm.values
+                              .map(
+                                (algorithm) => DropdownMenuItem(
+                                  value: algorithm,
+                                  child: Text(algorithm.displayName),
+                                ),
+                              )
+                              .toList(growable: false),
+                          onChanged: (algorithm) {
+                            if (algorithm == null) return;
+                            state.updateAlarmSettings(
+                              settings.copyWith(predictionAlgorithm: algorithm),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Card(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.errorContainer.withValues(alpha: 0.35),
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
@@ -122,9 +178,7 @@ class _AlarmConfigScreenState extends State<AlarmConfigScreen> {
                       children: [
                         Text(
                           'Critical low safety alarm',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
+                          style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(fontWeight: FontWeight.w800),
                         ),
                         const SizedBox(height: 8),
@@ -133,10 +187,10 @@ class _AlarmConfigScreenState extends State<AlarmConfigScreen> {
                           'play an urgent alarm sound. This cannot be turned off and is separate from '
                           'the range settings below. If the 20-minute prediction falls below this level, '
                           'the app plays three short beeps with a pause so you can tell it is a forecast.',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
-                              ?.copyWith(color: scheme.onSurface.withValues(alpha: 0.85)),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: scheme.onSurface.withValues(alpha: 0.85),
+                              ),
                         ),
                       ],
                     ),
@@ -154,9 +208,7 @@ class _AlarmConfigScreenState extends State<AlarmConfigScreen> {
                             Expanded(
                               child: Text(
                                 'Alarm enabled',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
+                                style: Theme.of(context).textTheme.titleMedium
                                     ?.copyWith(fontWeight: FontWeight.w800),
                               ),
                             ),
@@ -170,14 +222,16 @@ class _AlarmConfigScreenState extends State<AlarmConfigScreen> {
                         ),
                         Text(
                           'When enabled, the alarm plays every minute while glucose is out of range.',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
-                              ?.copyWith(color: scheme.onSurface.withValues(alpha: 0.75)),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: scheme.onSurface.withValues(alpha: 0.75),
+                              ),
                         ),
                         const SizedBox(height: 12),
                         FilledButton.icon(
-                          onPressed: !settings.enabled ? null : () => state.testAlarm(),
+                          onPressed: !settings.enabled
+                              ? null
+                              : () => state.testAlarm(),
                           icon: const Icon(Icons.notifications_active_outlined),
                           label: const Text('Test alarm'),
                         ),
@@ -194,9 +248,7 @@ class _AlarmConfigScreenState extends State<AlarmConfigScreen> {
                       children: [
                         Text(
                           'Range',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
+                          style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(fontWeight: FontWeight.w800),
                         ),
                         const SizedBox(height: 8),
@@ -210,9 +262,13 @@ class _AlarmConfigScreenState extends State<AlarmConfigScreen> {
                           max: 10.0,
                           divisions: 85,
                           label: min.toStringAsFixed(1),
-                          onChanged: (v) => setState(() => _min = double.parse(v.toStringAsFixed(1))),
+                          onChanged: (v) => setState(
+                            () => _min = double.parse(v.toStringAsFixed(1)),
+                          ),
                           onChangeEnd: (v) async {
-                            final next = settings.copyWith(minMmol: double.parse(v.toStringAsFixed(1)));
+                            final next = settings.copyWith(
+                              minMmol: double.parse(v.toStringAsFixed(1)),
+                            );
                             await state.updateAlarmSettings(next);
                           },
                         ),
@@ -227,9 +283,13 @@ class _AlarmConfigScreenState extends State<AlarmConfigScreen> {
                           max: 25.0,
                           divisions: 190,
                           label: max.toStringAsFixed(1),
-                          onChanged: (v) => setState(() => _max = double.parse(v.toStringAsFixed(1))),
+                          onChanged: (v) => setState(
+                            () => _max = double.parse(v.toStringAsFixed(1)),
+                          ),
                           onChangeEnd: (v) async {
-                            final next = settings.copyWith(maxMmol: double.parse(v.toStringAsFixed(1)));
+                            final next = settings.copyWith(
+                              maxMmol: double.parse(v.toStringAsFixed(1)),
+                            );
                             await state.updateAlarmSettings(next);
                           },
                         ),
@@ -237,9 +297,7 @@ class _AlarmConfigScreenState extends State<AlarmConfigScreen> {
                           const SizedBox(height: 8),
                           Text(
                             'Min must be lower than max.',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
+                            style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(color: scheme.error),
                           ),
                         ],
@@ -259,9 +317,7 @@ class _AlarmConfigScreenState extends State<AlarmConfigScreen> {
                             Expanded(
                               child: Text(
                                 'Out of sync (stale data)',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
+                                style: Theme.of(context).textTheme.titleMedium
                                     ?.copyWith(fontWeight: FontWeight.w800),
                               ),
                             ),
@@ -275,10 +331,10 @@ class _AlarmConfigScreenState extends State<AlarmConfigScreen> {
                         ),
                         Text(
                           'Triggers when no new reading arrives for more than ${settings.staleAfterMinutes} minutes.',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
-                              ?.copyWith(color: scheme.onSurface.withValues(alpha: 0.75)),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: scheme.onSurface.withValues(alpha: 0.75),
+                              ),
                         ),
                         const SizedBox(height: 10),
                         Text(
@@ -310,4 +366,3 @@ class _AlarmConfigScreenState extends State<AlarmConfigScreen> {
     );
   }
 }
-

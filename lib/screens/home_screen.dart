@@ -261,7 +261,7 @@ class _PredictionCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Method: ${p.method} • Trend: $trend (${slope.toStringAsFixed(2)} mmol/min)',
+                    'Method: ${p.algorithm.shortName} • Quality: ${p.quality.status.displayName} • Trend: $trend (${slope.toStringAsFixed(2)} mmol/min)',
                     style: Theme.of(context).textTheme.labelMedium?.copyWith(
                       color: scheme.onSurface.withValues(alpha: 0.65),
                     ),
