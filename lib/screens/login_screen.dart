@@ -31,7 +31,11 @@ class _LoginScreenState extends State<LoginScreen> {
     if (username.isEmpty || password.isEmpty) return;
 
     final state = context.read<AppState>();
-    await state.login(username: username, password: password, rememberMe: _rememberMe);
+    await state.login(
+      username: username,
+      password: password,
+      rememberMe: _rememberMe,
+    );
   }
 
   @override
@@ -42,8 +46,9 @@ class _LoginScreenState extends State<LoginScreen> {
     final usernameError = _submitted && _usernameController.text.trim().isEmpty
         ? 'Enter your Dexcom username'
         : null;
-    final passwordError =
-        _submitted && _passwordController.text.isEmpty ? 'Enter your password' : null;
+    final passwordError = _submitted && _passwordController.text.isEmpty
+        ? 'Enter your password'
+        : null;
 
     final viewInsets = MediaQuery.viewInsetsOf(context);
     const horizontalPadding = 20.0;
@@ -71,8 +76,11 @@ class _LoginScreenState extends State<LoginScreen> {
           SafeArea(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final minContentHeight = (constraints.maxHeight - verticalPadding * 2)
-                    .clamp(0.0, double.infinity);
+                final minContentHeight =
+                    (constraints.maxHeight - verticalPadding * 2).clamp(
+                      0.0,
+                      double.infinity,
+                    );
                 return Align(
                   alignment: Alignment.topCenter,
                   child: ConstrainedBox(
@@ -84,62 +92,75 @@ class _LoginScreenState extends State<LoginScreen> {
                         horizontalPadding,
                         verticalPadding + viewInsets.bottom,
                       ),
-                      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
                       child: ConstrainedBox(
-                        constraints: BoxConstraints(minHeight: minContentHeight),
+                        constraints: BoxConstraints(
+                          minHeight: minContentHeight,
+                        ),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             Text(
-                              'Dexcom Follow',
+                              'Teddycom',
                               textAlign: TextAlign.center,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .displaySmall
+                              style: Theme.of(context).textTheme.displaySmall
                                   ?.copyWith(fontWeight: FontWeight.w700),
                             ),
                             const SizedBox(height: 10),
                             Text(
                               'Sign in to view your latest glucose reading.',
                               textAlign: TextAlign.center,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyLarge
-                                  ?.copyWith(color: scheme.onSurface.withValues(alpha: 0.75)),
+                              style: Theme.of(context).textTheme.bodyLarge
+                                  ?.copyWith(
+                                    color: scheme.onSurface.withValues(
+                                      alpha: 0.75,
+                                    ),
+                                  ),
                             ),
                             const SizedBox(height: 18),
                             Card(
                               child: Padding(
                                 padding: const EdgeInsets.all(18),
                                 child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
                                   children: [
                                     TextField(
                                       controller: _usernameController,
                                       keyboardType: TextInputType.emailAddress,
-                                      autofillHints: const [AutofillHints.username],
+                                      autofillHints: const [
+                                        AutofillHints.username,
+                                      ],
                                       decoration: InputDecoration(
                                         labelText: 'Username',
                                         errorText: usernameError,
-                                        prefixIcon: const Icon(Icons.person_outline),
+                                        prefixIcon: const Icon(
+                                          Icons.person_outline,
+                                        ),
                                       ),
                                     ),
                                     const SizedBox(height: 12),
                                     TextField(
                                       controller: _passwordController,
                                       obscureText: _obscurePassword,
-                                      autofillHints: const [AutofillHints.password],
+                                      autofillHints: const [
+                                        AutofillHints.password,
+                                      ],
                                       decoration: InputDecoration(
                                         labelText: 'Password',
                                         errorText: passwordError,
-                                        prefixIcon: const Icon(Icons.lock_outline),
+                                        prefixIcon: const Icon(
+                                          Icons.lock_outline,
+                                        ),
                                         suffixIcon: IconButton(
                                           tooltip: _obscurePassword
                                               ? 'Show password'
                                               : 'Hide password',
                                           onPressed: () => setState(
-                                            () => _obscurePassword = !_obscurePassword,
+                                            () => _obscurePassword =
+                                                !_obscurePassword,
                                           ),
                                           icon: Icon(
                                             _obscurePassword
@@ -155,13 +176,16 @@ class _LoginScreenState extends State<LoginScreen> {
                                       children: [
                                         Switch(
                                           value: _rememberMe,
-                                          onChanged: (v) => setState(() => _rememberMe = v),
+                                          onChanged: (v) =>
+                                              setState(() => _rememberMe = v),
                                         ),
                                         const SizedBox(width: 8),
                                         Expanded(
                                           child: Text(
                                             'Remember login on this device (insecure)',
-                                            style: Theme.of(context).textTheme.bodyMedium,
+                                            style: Theme.of(
+                                              context,
+                                            ).textTheme.bodyMedium,
                                           ),
                                         ),
                                       ],
@@ -171,12 +195,18 @@ class _LoginScreenState extends State<LoginScreen> {
                                       Container(
                                         padding: const EdgeInsets.all(12),
                                         decoration: BoxDecoration(
-                                          color: scheme.errorContainer.withValues(alpha: 0.55),
-                                          borderRadius: BorderRadius.circular(14),
+                                          color: scheme.errorContainer
+                                              .withValues(alpha: 0.55),
+                                          borderRadius: BorderRadius.circular(
+                                            14,
+                                          ),
                                         ),
                                         child: Text(
                                           state.error!,
-                                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodyMedium
+                                              ?.copyWith(
                                                 color: scheme.onErrorContainer,
                                               ),
                                         ),
@@ -185,10 +215,14 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ],
                                     FilledButton.icon(
                                       onPressed:
-                                          state.phase == AppPhase.initializing ? null : _submit,
+                                          state.phase == AppPhase.initializing
+                                          ? null
+                                          : _submit,
                                       icon: const Icon(Icons.login),
                                       label: Padding(
-                                        padding: const EdgeInsets.symmetric(vertical: 12),
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 12,
+                                        ),
                                         child: Text(
                                           state.phase == AppPhase.initializing
                                               ? 'Signing in…'
@@ -198,7 +232,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ),
                                     const SizedBox(height: 8),
                                     TextButton.icon(
-                                      onPressed: () => state.logout(clearSaved: true),
+                                      onPressed: () =>
+                                          state.logout(clearSaved: true),
                                       icon: const Icon(Icons.delete_outline),
                                       label: const Text('Clear saved login'),
                                     ),
@@ -210,7 +245,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                           .textTheme
                                           .labelMedium
                                           ?.copyWith(
-                                            color: scheme.onSurface.withValues(alpha: 0.65),
+                                            color: scheme.onSurface.withValues(
+                                              alpha: 0.65,
+                                            ),
                                           ),
                                     ),
                                   ],
@@ -231,4 +268,3 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 }
-

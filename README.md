@@ -1,11 +1,36 @@
-# flutter_dexcom_follow
+# Teddycom
 
-Unofficial Flutter client for **Dexcom Share** glucose data: charts, configurable alarms, and Android foreground monitoring. This project is **not** affiliated with, endorsed by, or supported by Dexcom. Use at your own risk; it is **not** a medical device and must not replace clinical judgment or prescribed therapy. In fact it will miss alarms and probably cause harm if used. Its an experiment.
+Unofficial Flutter client for **Dexcom Share** glucose data, built for a small private Android install base. It shows recent glucose data, charts, simple 20-minute prediction, configurable alarms, and Android foreground monitoring.
+
+This project is **not** affiliated with, endorsed by, or supported by Dexcom. Use at your own risk; it is **not** a medical device and must not replace clinical judgment, prescribed therapy, or the official Dexcom app. It can miss alarms. Treat it as an experiment.
+
+## Current app behavior
+
+- Signs in to Dexcom Share using the EU/International server.
+- Displays the latest glucose reading in mmol/L with trend direction and local reading time.
+- Loads up to 24 hours of glucose history for the chart.
+- Shows a 20-minute prediction when enough recent readings are available.
+- Draws alarm threshold lines on the glucose chart.
+- Stores alarm settings locally on the device.
+- Can remember the Dexcom login locally if enabled. This is convenient for background monitoring, but it is not secure storage.
+- Runs Android background monitoring as a foreground service when saved login is enabled.
+- Polls in the background about every 5 minutes.
+- Shows monitoring and alarm notifications on Android.
+
+## Alarm behavior
+
+- Standard low/high alarms are configurable. Defaults are 3.9 mmol/L low and 14.0 mmol/L high.
+- Standard alarms repeat no more than once per minute while glucose remains out of range.
+- Stale-data alarms are enabled by default and trigger when no new reading arrives for more than 15 minutes.
+- Critical low alarms at or below 3.1 mmol/L always run, even if standard alarms are disabled.
+- Predicted critical lows below 3.1 mmol/L also alarm, using a distinct short-beep pattern.
+- Background alarms require Android notification permission and can be affected by OEM battery restrictions.
 
 ## Requirements
 
 - [Flutter](https://docs.flutter.dev/get-started/install) (stable channel), Dart SDK as declared in `pubspec.yaml`
-- Android SDK / Xcode tooling for the platforms you build
+- Android SDK for APK builds
+- Xcode tooling only if you experiment with iOS/macOS builds
 
 ## Getting started
 
@@ -13,6 +38,8 @@ Unofficial Flutter client for **Dexcom Share** glucose data: charts, configurabl
 flutter pub get
 flutter run
 ```
+
+The app is primarily maintained for Android. Other Flutter platform folders exist from the project template, but the background monitoring and APK release workflow are Android-focused.
 
 ### Dependency layout
 
@@ -37,6 +64,16 @@ Android APK releases are published by the `Android APK Release` GitHub Actions w
 
 Release tags use the same version string Android reports to update managers, for example `v1.2.3`. The Android `versionCode` still increments on every release so APK upgrades install cleanly.
 
+Pushes to `main` also publish an Android release unless every changed file is under `.github/workflows/**`. Workflow-only pushes are ignored because GitHub's default Actions token cannot reliably create release tags that point at workflow-changing commits.
+
+The published Android package ID is:
+
+```text
+com.rknell.teddycom
+```
+
+Keep this package ID and signing key stable. Changing either one means Android will treat a future APK as a different app or refuse to upgrade it.
+
 The workflow requires these repository secrets:
 
 - `ANDROID_KEYSTORE_BASE64`
@@ -58,11 +95,15 @@ On each Android device:
 4. Set the APK filter regex to `^teddycom-.*\.apk$`.
 5. Install Teddycom from Obtainium once.
 
-After that, new GitHub releases should be detected by Obtainium and installed from the release APK. The Android package ID is `com.rknell.teddycom`; keep that ID and signing key stable or Android will treat a future build as a different app.
+After that, new GitHub releases should be detected by Obtainium and installed from the release APK. Android will still ask for install confirmation unless the device has a privileged/managed installer setup.
+
+If a device previously had a build installed with the old package ID `com.example.flutter_dexcom_follow`, uninstall that build and install the new Obtainium-managed `com.rknell.teddycom` build once.
 
 ## Security and privacy
 
 - Dexcom username and password are stored on-device only when the user enables remembered login (see `lib/app/credentials.dart`).
+- Saved login is needed for background monitoring to auto-start after sign-in or reboot.
+- Use "Log out and clear saved login" or "Clear saved login" to remove saved credentials from the device.
 - Do not commit `android/local.properties`, keystores, `key.properties`, or environment files containing real credentials. See [SECURITY.md](SECURITY.md).
 
 ## License

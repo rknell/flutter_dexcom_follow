@@ -34,21 +34,21 @@ class AppDrawer extends StatelessWidget {
                 child: Align(
                   alignment: Alignment.bottomLeft,
                   child: Text(
-                    'Dexcom Follow',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleLarge
-                        ?.copyWith(fontWeight: FontWeight.w800, color: Colors.white, shadows: [
-                      Shadow(
-                        offset: Offset(0, 1.5),
-                        blurRadius: 3,
-                        color: Colors.black54,
-                      ),
-                    ]),
+                    'Teddycom',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      shadows: [
+                        Shadow(
+                          offset: Offset(0, 1.5),
+                          blurRadius: 3,
+                          color: Colors.black54,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-         
             ),
             ListTile(
               leading: const Icon(Icons.show_chart),
@@ -69,4 +69,3 @@ class AppDrawer extends StatelessWidget {
     );
   }
 }
-

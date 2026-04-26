@@ -26,11 +26,9 @@ class DexcomFollowApp extends StatelessWidget {
       create: (_) => AppState(credentialStore: CredentialStore()),
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
-        title: 'Dexcom Follow',
+        title: 'Teddycom',
         theme: buildAppTheme(),
-        routes: {
-          AlarmConfigScreen.routeName: (_) => const AlarmConfigScreen(),
-        },
+        routes: {AlarmConfigScreen.routeName: (_) => const AlarmConfigScreen()},
         home: const _AppRoot(),
       ),
     );
@@ -89,10 +87,9 @@ class _SplashScreen extends StatelessWidget {
             const SizedBox(height: 14),
             Text(
               'Connecting…',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(color: scheme.onSurface.withValues(alpha: 0.75)),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: scheme.onSurface.withValues(alpha: 0.75),
+              ),
             ),
           ],
         ),

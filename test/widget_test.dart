@@ -15,7 +15,7 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     await tester.pumpWidget(const DexcomFollowApp());
     await tester.pumpAndSettle();
-    expect(find.text('Dexcom Follow'), findsOneWidget);
+    expect(find.text('Teddycom'), findsOneWidget);
     expect(find.text('Sign in'), findsOneWidget);
   });
 }
