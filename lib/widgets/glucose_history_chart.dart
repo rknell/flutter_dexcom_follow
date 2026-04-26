@@ -39,18 +39,19 @@ class _GlucoseHistoryChartState extends State<GlucoseHistoryChart> {
           padding: const EdgeInsets.all(16),
           child: Text(
             'Not enough history yet to show a graph.',
-            style: Theme.of(context)
-                .textTheme
-                .bodyMedium
-                ?.copyWith(color: scheme.onSurface.withValues(alpha: 0.75)),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: scheme.onSurface.withValues(alpha: 0.75),
+            ),
           ),
         ),
       );
     }
 
     final totalPoints = history.length;
-    final targetVisible =
-        (_visiblePoints ?? totalPoints).clamp(_minVisiblePoints, totalPoints);
+    final targetVisible = (_visiblePoints ?? totalPoints).clamp(
+      _minVisiblePoints,
+      totalPoints,
+    );
     final window = GlucoseChartWindow.forVisiblePoints(
       totalPoints: totalPoints,
       visiblePoints: targetVisible,
@@ -59,8 +60,12 @@ class _GlucoseHistoryChartState extends State<GlucoseHistoryChart> {
     final visiblePoints = window.visiblePoints;
     final startIdx = window.startIdx;
     final endIdx = window.endIdx;
-    final displayedStartTime = formatLocalTimeFromIsoUtc(history[startIdx].timestamp);
-    final displayedEndTime = formatLocalTimeFromIsoUtc(history[endIdx].timestamp);
+    final displayedStartTime = formatLocalTimeFromIsoUtc(
+      history[startIdx].timestamp,
+    );
+    final displayedEndTime = formatLocalTimeFromIsoUtc(
+      history[endIdx].timestamp,
+    );
 
     final spots = <FlSpot>[];
     for (var i = startIdx; i <= endIdx; i++) {
@@ -77,7 +82,9 @@ class _GlucoseHistoryChartState extends State<GlucoseHistoryChart> {
       final lastY = history.last.mmol;
       predSpots.add(FlSpot(lastIdx, lastY));
       for (var i = 0; i < pred.nextPoints.length; i++) {
-        predSpots.add(FlSpot(lastIdx + (i + 1).toDouble(), pred.nextPoints[i].mmol));
+        predSpots.add(
+          FlSpot(lastIdx + (i + 1).toDouble(), pred.nextPoints[i].mmol),
+        );
       }
     }
 
@@ -92,10 +99,9 @@ class _GlucoseHistoryChartState extends State<GlucoseHistoryChart> {
           children: [
             Text(
               'History ($displayedStartTime–$displayedEndTime)',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w800),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 12),
             SizedBox(
@@ -117,11 +123,17 @@ class _GlucoseHistoryChartState extends State<GlucoseHistoryChart> {
                   ),
                   borderData: FlBorderData(
                     show: true,
-                    border: Border.all(color: scheme.onSurface.withValues(alpha: 0.10)),
+                    border: Border.all(
+                      color: scheme.onSurface.withValues(alpha: 0.10),
+                    ),
                   ),
                   titlesData: FlTitlesData(
-                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
                     leftTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
@@ -143,8 +155,13 @@ class _GlucoseHistoryChartState extends State<GlucoseHistoryChart> {
                         showTitles: true,
                         interval: (visiblePoints / 4).clamp(1, 96).toDouble(),
                         getTitlesWidget: (value, meta) {
-                          final idx = value.round().clamp(0, history.length - 1);
-                          final t = formatLocalTimeFromIsoUtc(history[idx].timestamp);
+                          final idx = value.round().clamp(
+                            0,
+                            history.length - 1,
+                          );
+                          final t = formatLocalTimeFromIsoUtc(
+                            history[idx].timestamp,
+                          );
                           return Padding(
                             padding: const EdgeInsets.only(top: 6),
                             child: Text(
@@ -162,23 +179,67 @@ class _GlucoseHistoryChartState extends State<GlucoseHistoryChart> {
                   lineTouchData: LineTouchData(
                     enabled: true,
                     handleBuiltInTouches: true,
+                    getTouchLineStart: (barData, spotIndex) => maxY,
+                    getTouchLineEnd: (barData, spotIndex) =>
+                        barData.spots[spotIndex].y,
+                    getTouchedSpotIndicator: (barData, spotIndexes) {
+                      return spotIndexes
+                          .map((spotIndex) {
+                            final lineColor =
+                                (barData.gradient?.colors.first ??
+                                        barData.color ??
+                                        scheme.primary)
+                                    .withValues(alpha: 0.7);
+                            return TouchedSpotIndicatorData(
+                              FlLine(
+                                color: lineColor,
+                                strokeWidth: 1.5,
+                                dashArray: const [5, 5],
+                              ),
+                              FlDotData(
+                                getDotPainter: (spot, percent, bar, index) {
+                                  return FlDotCirclePainter(
+                                    radius: 4,
+                                    color: lineColor,
+                                    strokeWidth: 2,
+                                    strokeColor: scheme.surface,
+                                  );
+                                },
+                              ),
+                            );
+                          })
+                          .toList(growable: false);
+                    },
                     touchTooltipData: LineTouchTooltipData(
                       tooltipBorderRadius: BorderRadius.circular(14),
-                      getTooltipColor: (_) => scheme.surfaceContainerHighest.withValues(alpha: 0.95),
+                      tooltipMargin: 8,
+                      maxContentWidth: 160,
+                      fitInsideHorizontally: true,
+                      fitInsideVertically: true,
+                      showOnTopOfTheChartBoxArea: true,
+                      getTooltipColor: (_) => scheme.surfaceContainerHighest
+                          .withValues(alpha: 0.95),
                       getTooltipItems: (touchedSpots) {
-                        return touchedSpots.map((spot) {
-                          final idx = spot.x.round().clamp(0, history.length - 1);
-                          final entry = history[idx];
-                          final time = formatLocalTimeFromIsoUtc(entry.timestamp);
-                          return LineTooltipItem(
-                            '${formatMmol(entry.mmol)} mmol/L\n$time',
-                            TextStyle(
-                              color: scheme.onSurface,
-                              fontWeight: FontWeight.w700,
-                              height: 1.2,
-                            ),
-                          );
-                        }).toList(growable: false);
+                        return touchedSpots
+                            .map((spot) {
+                              final idx = spot.x.round().clamp(
+                                0,
+                                history.length - 1,
+                              );
+                              final entry = history[idx];
+                              final time = formatLocalTimeFromIsoUtc(
+                                entry.timestamp,
+                              );
+                              return LineTooltipItem(
+                                '${formatMmol(entry.mmol)} mmol/L\n$time',
+                                TextStyle(
+                                  color: scheme.onSurface,
+                                  fontWeight: FontWeight.w700,
+                                  height: 1.2,
+                                ),
+                              );
+                            })
+                            .toList(growable: false);
                       },
                     ),
                   ),
@@ -225,42 +286,46 @@ class _GlucoseHistoryChartState extends State<GlucoseHistoryChart> {
                         spots: predSpots,
                       ),
                   ],
-                  extraLinesData: ExtraLinesData(horizontalLines: [
-                    HorizontalLine(
-                      y: widget.alarmMinMmol,
-                      color: scheme.error.withValues(alpha: 0.55),
-                      strokeWidth: 1.5,
-                      dashArray: [6, 6],
-                      label: HorizontalLineLabel(
-                        show: true,
-                        alignment: Alignment.topRight,
-                        padding: const EdgeInsets.only(right: 8, bottom: 4),
-                        style: TextStyle(
-                          color: scheme.error.withValues(alpha: 0.9),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
+                  extraLinesData: ExtraLinesData(
+                    horizontalLines: [
+                      HorizontalLine(
+                        y: widget.alarmMinMmol,
+                        color: scheme.error.withValues(alpha: 0.55),
+                        strokeWidth: 1.5,
+                        dashArray: [6, 6],
+                        label: HorizontalLineLabel(
+                          show: true,
+                          alignment: Alignment.topRight,
+                          padding: const EdgeInsets.only(right: 8, bottom: 4),
+                          style: TextStyle(
+                            color: scheme.error.withValues(alpha: 0.9),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          labelResolver: (_) =>
+                              widget.alarmMinMmol.toStringAsFixed(1),
                         ),
-                        labelResolver: (_) => widget.alarmMinMmol.toStringAsFixed(1),
                       ),
-                    ),
-                    HorizontalLine(
-                      y: widget.alarmMaxMmol,
-                      color: scheme.tertiary.withValues(alpha: 0.55),
-                      strokeWidth: 1.5,
-                      dashArray: [6, 6],
-                      label: HorizontalLineLabel(
-                        show: true,
-                        alignment: Alignment.topRight,
-                        padding: const EdgeInsets.only(right: 8, bottom: 4),
-                        style: TextStyle(
-                          color: scheme.tertiary.withValues(alpha: 0.9),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
+                      HorizontalLine(
+                        y: widget.alarmMaxMmol,
+                        color: scheme.tertiary.withValues(alpha: 0.55),
+                        strokeWidth: 1.5,
+                        dashArray: [6, 6],
+                        label: HorizontalLineLabel(
+                          show: true,
+                          alignment: Alignment.topRight,
+                          padding: const EdgeInsets.only(right: 8, bottom: 4),
+                          style: TextStyle(
+                            color: scheme.tertiary.withValues(alpha: 0.9),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          labelResolver: (_) =>
+                              widget.alarmMaxMmol.toStringAsFixed(1),
                         ),
-                        labelResolver: (_) => widget.alarmMaxMmol.toStringAsFixed(1),
                       ),
-                    ),
-                  ]),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -276,10 +341,15 @@ class _GlucoseHistoryChartState extends State<GlucoseHistoryChart> {
                     divisions: (totalPoints - _minVisiblePoints).clamp(1, 1000),
                     label: '$visiblePoints pts',
                     onChanged: (v) {
-                      final hidden = v.round().clamp(0, totalPoints - _minVisiblePoints);
+                      final hidden = v.round().clamp(
+                        0,
+                        totalPoints - _minVisiblePoints,
+                      );
                       setState(() {
-                        _visiblePoints =
-                            (totalPoints - hidden).clamp(_minVisiblePoints, totalPoints);
+                        _visiblePoints = (totalPoints - hidden).clamp(
+                          _minVisiblePoints,
+                          totalPoints,
+                        );
                       });
                     },
                   ),
@@ -291,8 +361,8 @@ class _GlucoseHistoryChartState extends State<GlucoseHistoryChart> {
               Text(
                 'Dashed line = 20‑minute forecast',
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      color: scheme.onSurface.withValues(alpha: 0.65),
-                    ),
+                  color: scheme.onSurface.withValues(alpha: 0.65),
+                ),
               ),
             ],
           ],
@@ -301,4 +371,3 @@ class _GlucoseHistoryChartState extends State<GlucoseHistoryChart> {
     );
   }
 }
-
