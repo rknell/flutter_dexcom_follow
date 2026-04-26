@@ -26,7 +26,7 @@ class _BackgroundSettingsScreenState extends State<BackgroundSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return _SettingsScaffold(
-      title: 'Background',
+      title: 'Monitoring',
       children: [
         FutureBuilder<(bool, SavedCredentials?)>(
           future: () async {
@@ -384,7 +384,7 @@ class DisplaySettingsScreen extends StatelessWidget {
     final settings = state.alarmSettings;
 
     return _SettingsScaffold(
-      title: 'Display',
+      title: 'Units',
       children: [
         _SettingsCard(
           title: 'Glucose units',

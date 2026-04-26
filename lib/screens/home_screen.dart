@@ -31,22 +31,6 @@ class HomeScreen extends StatelessWidget {
                 : null,
             icon: const Icon(Icons.refresh),
           ),
-          PopupMenuButton<String>(
-            onSelected: (value) async {
-              if (value == 'logout') {
-                await state.logout();
-              } else if (value == 'logout_clear') {
-                await state.logout(clearSaved: true);
-              }
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'logout', child: Text('Log out')),
-              PopupMenuItem(
-                value: 'logout_clear',
-                child: Text('Log out and clear saved login'),
-              ),
-            ],
-          ),
         ],
       ),
       body: SafeArea(

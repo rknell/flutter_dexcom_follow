@@ -65,7 +65,7 @@ class AppDrawer extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.monitor_heart_outlined),
-              title: const Text('Background'),
+              title: const Text('Monitoring'),
               onTap: () {
                 Navigator.of(context).pop();
                 Navigator.of(
@@ -85,7 +85,7 @@ class AppDrawer extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.tune),
-              title: const Text('Display'),
+              title: const Text('Units'),
               onTap: () {
                 Navigator.of(context).pop();
                 Navigator.of(
