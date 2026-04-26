@@ -8,5 +8,5 @@ Instead, contact the maintainers privately (for example via GitHub Security Advi
 
 ## Scope notes
 
-- This project stores Dexcom credentials in **on-device** storage when the user opts in. It does not ship with any server-side component in this repo.
+- This project stores Dexcom credentials in **on-device secure storage** when the user opts in. It does not ship with any server-side component in this repo.
 - Do not commit real passwords, session tokens, keystores, or `google-services.json`-style files to a public fork.

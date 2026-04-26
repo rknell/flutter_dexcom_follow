@@ -11,10 +11,12 @@ class DexcomClient {
     required String password,
     required String server,
     http.Client? httpClient,
+    Duration requestTimeout = const Duration(seconds: 20),
   })  : _username = username,
         _password = password,
         _server = normalizeServer(server),
         _http = httpClient ?? http.Client(),
+        _requestTimeout = requestTimeout,
         _ownsClient = httpClient == null {
     if (username.isEmpty) {
       throw ArgumentError("Must provide username");
@@ -31,6 +33,7 @@ class DexcomClient {
   final String _password;
   final DexcomServer _server;
   final http.Client _http;
+  final Duration _requestTimeout;
   final bool _ownsClient;
 
   static const _applicationIds = <DexcomServer, String>{
@@ -67,6 +70,27 @@ class DexcomClient {
     return str.replaceAll('"', "").trim();
   }
 
+  Future<http.Response> _postJson(
+    String resource,
+    Map<String, Object?> body,
+  ) {
+    return _http
+        .post(
+          _apiUrl(resource),
+          headers: const {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+          },
+          body: jsonEncode(body),
+        )
+        .timeout(
+          _requestTimeout,
+          onTimeout: () => throw DexcomApiException(
+            "Dexcom request timed out after ${_requestTimeout.inSeconds} seconds",
+          ),
+        );
+  }
+
   Trend _normalizeTrend(Object raw) {
     // Dexcom used to rank trends from 1-7 (1 = max raise, 7 = max drop)
     // This recently changed to use human readable strings instead.
@@ -84,17 +108,13 @@ class DexcomClient {
   /// Returns the Dexcom `account_id`.
   Future<String> getAccountId() async {
     try {
-      final response = await _http.post(
-        _apiUrl("General/AuthenticatePublisherAccount"),
-        headers: const {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-        },
-        body: jsonEncode({
+      final response = await _postJson(
+        "General/AuthenticatePublisherAccount",
+        {
           "applicationId": _applicationId,
           "accountName": _username,
           "password": _password,
-        }),
+        },
       );
 
       final data = await _readBody(response);
@@ -117,17 +137,13 @@ class DexcomClient {
     try {
       final accountId = await getAccountId();
 
-      final response = await _http.post(
-        _apiUrl("General/LoginPublisherAccountById"),
-        headers: const {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-        },
-        body: jsonEncode({
+      final response = await _postJson(
+        "General/LoginPublisherAccountById",
+        {
           "applicationId": _applicationId,
           "accountId": accountId,
           "password": _password,
-        }),
+        },
       );
 
       final data = await _readBody(response);
@@ -155,17 +171,13 @@ class DexcomClient {
     try {
       final sessionId = await getSessionId();
 
-      final response = await _http.post(
-        _apiUrl("Publisher/ReadPublisherLatestGlucoseValues"),
-        headers: const {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-        },
-        body: jsonEncode({
+      final response = await _postJson(
+        "Publisher/ReadPublisherLatestGlucoseValues",
+        {
           "maxCount": options.maxCount,
           "minutes": options.minutes,
           "sessionId": sessionId,
-        }),
+        },
       );
 
       final data = await _readBody(response);
@@ -178,7 +190,8 @@ class DexcomClient {
       }
 
       if (data is! List) {
-        throw DexcomApiException("Unexpected Dexcom response: $data", data: data);
+        throw DexcomApiException("Unexpected Dexcom response: $data",
+            data: data);
       }
 
       return data.map((raw) {
@@ -192,8 +205,9 @@ class DexcomClient {
         if (millis == null) {
           throw DexcomApiException("Unexpected Dexcom WT value: ${entry.wt}");
         }
-        final timestamp = DateTime.fromMillisecondsSinceEpoch(millis, isUtc: true)
-            .toIso8601String();
+        final timestamp =
+            DateTime.fromMillisecondsSinceEpoch(millis, isUtc: true)
+                .toIso8601String();
 
         return GlucoseEntry(
           mgdl: entry.value,

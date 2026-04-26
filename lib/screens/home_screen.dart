@@ -2,8 +2,10 @@ import 'package:dexcom_share_api/dexcom_share_api.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../app/alarm_logic.dart' show isDataStale, kCriticalLowMmol;
 import '../app/alarm_settings.dart';
 import '../app/app_state.dart';
+import '../app/background_monitor.dart';
 import '../app/dexcom_repository.dart';
 import '../app/glucose_format.dart';
 import '../app/prediction.dart';
@@ -42,13 +44,17 @@ class HomeScreen extends StatelessWidget {
               children: [
                 _HeroGlucoseCard(
                   snapshot: snapshot,
-                  unit: state.alarmSettings.glucoseUnit,
+                  settings: state.alarmSettings,
                 ),
                 const SizedBox(height: 12),
                 _PredictionCard(
                   prediction: state.prediction,
                   unit: state.alarmSettings.glucoseUnit,
+                  algorithm: state.alarmSettings.predictionAlgorithm,
+                  onTap: () => _showPredictionMethodPicker(context, state),
                 ),
+                const SizedBox(height: 12),
+                const _MonitoringStatusCard(),
                 const SizedBox(height: 12),
                 GlucoseHistoryChart(
                   history: state.history,
@@ -82,14 +88,15 @@ class HomeScreen extends StatelessWidget {
 }
 
 class _HeroGlucoseCard extends StatelessWidget {
-  const _HeroGlucoseCard({required this.snapshot, required this.unit});
+  const _HeroGlucoseCard({required this.snapshot, required this.settings});
 
   final GlucoseSnapshot? snapshot;
-  final GlucoseUnit unit;
+  final AlarmSettings settings;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final unit = settings.glucoseUnit;
     if (snapshot == null) {
       return Card(
         child: Padding(
@@ -114,8 +121,31 @@ class _HeroGlucoseCard extends StatelessWidget {
 
     final entry = snapshot!.entry;
     final mmol = entry.mmol;
-    final isLow = mmol <= 3.9;
-    final pillColor = isLow ? scheme.error : scheme.primary;
+    final readingTimeUtc = DateTime.tryParse(entry.timestamp)?.toUtc();
+    final nowUtc = DateTime.now().toUtc();
+    final age = readingTimeUtc == null
+        ? null
+        : nowUtc.difference(readingTimeUtc);
+    final isStale = readingTimeUtc == null
+        ? false
+        : isDataStale(
+            now: nowUtc,
+            readingTimeUtc: readingTimeUtc,
+            staleAfter: Duration(minutes: settings.staleAfterMinutes),
+          );
+    final status = _GlucoseDisplayStatus.fromMmol(
+      mmol,
+      minMmol: settings.minMmol,
+      maxMmol: settings.maxMmol,
+      isStale: isStale,
+    );
+    final pillColor = switch (status) {
+      _GlucoseDisplayStatus.critical => scheme.error,
+      _GlucoseDisplayStatus.low => scheme.error,
+      _GlucoseDisplayStatus.high => scheme.tertiary,
+      _GlucoseDisplayStatus.stale => scheme.outline,
+      _GlucoseDisplayStatus.ok => scheme.primary,
+    };
 
     return Card(
       child: Padding(
@@ -146,7 +176,7 @@ class _HeroGlucoseCard extends StatelessWidget {
                     ),
                   ),
                   child: Text(
-                    isLow ? 'LOW' : 'OK',
+                    status.label,
                     style: Theme.of(context).textTheme.labelLarge?.copyWith(
                       color: pillColor,
                       fontWeight: FontWeight.w800,
@@ -187,7 +217,7 @@ class _HeroGlucoseCard extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             Text(
-              'Time: ${formatLocalTimeFromIsoUtc(entry.timestamp)}',
+              'Time: ${formatLocalTimeFromIsoUtc(entry.timestamp)}${age == null ? '' : ' (${_formatAge(age)} ago)'}',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 color: scheme.onSurface.withValues(alpha: 0.75),
               ),
@@ -200,10 +230,17 @@ class _HeroGlucoseCard extends StatelessWidget {
 }
 
 class _PredictionCard extends StatelessWidget {
-  const _PredictionCard({required this.prediction, required this.unit});
+  const _PredictionCard({
+    required this.prediction,
+    required this.unit,
+    required this.algorithm,
+    required this.onTap,
+  });
 
   final PredictionResult? prediction;
   final GlucoseUnit unit;
+  final PredictionAlgorithm algorithm;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -211,12 +248,24 @@ class _PredictionCard extends StatelessWidget {
     final p = prediction;
     if (p == null || p.nextPoints.isEmpty) {
       return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Text(
-            'Prediction: collecting enough data…',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: scheme.onSurface.withValues(alpha: 0.75),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Prediction unavailable until enough recent readings arrive',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurface.withValues(alpha: 0.75),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Icon(Icons.tune, color: scheme.onSurfaceVariant),
+              ],
             ),
           ),
         ),
@@ -232,50 +281,99 @@ class _PredictionCard extends StatelessWidget {
         : 'falling';
 
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '20‑minute prediction',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '20-minute prediction',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '${formatGlucoseMmol(p20.mmol, unit)} ${unit.displayName} in 20 min',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: scheme.onSurface.withValues(alpha: 0.80),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${formatGlucoseMmol(p20.mmol, unit)} ${unit.displayName} in 20 min',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: scheme.onSurface.withValues(alpha: 0.80),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Method: ${p.algorithm.shortName} • Quality: ${p.quality.status.displayName} • Trend: $trend (${slope.toStringAsFixed(2)} mmol/min)',
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      color: scheme.onSurface.withValues(alpha: 0.65),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${algorithm.shortName} • $trend (${slope.toStringAsFixed(2)} mmol/min)',
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: scheme.onSurface.withValues(alpha: 0.65),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Icon(
-              slope.abs() < 0.01
-                  ? Icons.horizontal_rule
-                  : slope > 0
-                  ? Icons.trending_up
-                  : Icons.trending_down,
-              color: scheme.primary,
-              size: 34,
-            ),
-          ],
+              const SizedBox(width: 12),
+              Icon(
+                slope.abs() < 0.01
+                    ? Icons.horizontal_rule
+                    : slope > 0
+                    ? Icons.trending_up
+                    : Icons.trending_down,
+                color: scheme.primary,
+                size: 34,
+              ),
+            ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+class _MonitoringStatusCard extends StatelessWidget {
+  const _MonitoringStatusCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return FutureBuilder<BackgroundMonitorStatus>(
+      future: BackgroundMonitor.status(),
+      builder: (context, snap) {
+        final status = snap.data;
+        final ready = status?.isReady ?? false;
+        final text = status == null
+            ? 'Checking monitoring status...'
+            : ready
+            ? 'Background monitoring ready'
+            : _monitoringIssueText(status);
+        final color = ready ? scheme.primary : scheme.tertiary;
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                Icon(
+                  ready ? Icons.shield_outlined : Icons.shield_moon_outlined,
+                  color: color,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    text,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurface.withValues(alpha: 0.78),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -304,4 +402,94 @@ class _TrendIcon extends StatelessWidget {
       color: scheme.onSurface.withValues(alpha: 0.85),
     );
   }
+}
+
+enum _GlucoseDisplayStatus {
+  critical('CRITICAL'),
+  low('LOW'),
+  high('HIGH'),
+  stale('STALE'),
+  ok('OK');
+
+  const _GlucoseDisplayStatus(this.label);
+
+  final String label;
+
+  static _GlucoseDisplayStatus fromMmol(
+    double mmol, {
+    required double minMmol,
+    required double maxMmol,
+    required bool isStale,
+  }) {
+    if (mmol <= kCriticalLowMmol) return _GlucoseDisplayStatus.critical;
+    if (isStale) return _GlucoseDisplayStatus.stale;
+    if (mmol <= minMmol) return _GlucoseDisplayStatus.low;
+    if (mmol >= maxMmol) return _GlucoseDisplayStatus.high;
+    return _GlucoseDisplayStatus.ok;
+  }
+}
+
+String _formatAge(Duration age) {
+  final clean = age.isNegative ? Duration.zero : age;
+  if (clean.inMinutes < 1) return 'just now';
+  if (clean.inHours < 1) return '${clean.inMinutes} min';
+  return '${clean.inHours} h ${clean.inMinutes.remainder(60)} min';
+}
+
+String _monitoringIssueText(BackgroundMonitorStatus status) {
+  if (!status.hasSavedLogin) return 'Save login to enable background alarms';
+  if (status.userPaused || !status.running) {
+    return 'Background monitoring stopped';
+  }
+  if (!status.notificationPermissionGranted) {
+    return 'Notifications must be allowed for background alarms';
+  }
+  if (!status.ignoringBatteryOptimizations) {
+    return 'Set battery use to unrestricted for reliable monitoring';
+  }
+  return 'Background monitoring needs attention';
+}
+
+Future<void> _showPredictionMethodPicker(
+  BuildContext context,
+  AppState state,
+) async {
+  final selected = await showModalBottomSheet<PredictionAlgorithm>(
+    context: context,
+    showDragHandle: true,
+    builder: (context) {
+      final current = state.alarmSettings.predictionAlgorithm;
+      return SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+              child: Text(
+                'Prediction method',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+              ),
+            ),
+            for (final algorithm in PredictionAlgorithm.values)
+              ListTile(
+                title: Text(algorithm.displayName),
+                trailing: algorithm == current
+                    ? Icon(
+                        Icons.check_circle,
+                        color: Theme.of(context).colorScheme.primary,
+                      )
+                    : null,
+                onTap: () => Navigator.of(context).pop(algorithm),
+              ),
+          ],
+        ),
+      );
+    },
+  );
+  if (selected == null || !context.mounted) return;
+  await state.updateAlarmSettings(
+    state.alarmSettings.copyWith(predictionAlgorithm: selected),
+  );
 }

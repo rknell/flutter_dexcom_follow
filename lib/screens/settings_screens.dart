@@ -6,7 +6,6 @@ import '../app/alarm_logic.dart' show kCriticalLowMmol;
 import '../app/alarm_settings.dart';
 import '../app/app_state.dart';
 import '../app/background_monitor.dart';
-import '../app/credentials.dart';
 import '../app/glucose_format.dart';
 import '../app/prediction.dart';
 
@@ -22,35 +21,129 @@ class BackgroundSettingsScreen extends StatefulWidget {
 
 class _BackgroundSettingsScreenState extends State<BackgroundSettingsScreen> {
   bool _serviceBusy = false;
+  Future<BackgroundMonitorStatus>? _statusFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _reloadStatus();
+  }
+
+  void _reloadStatus() {
+    _statusFuture = BackgroundMonitor.status();
+  }
 
   @override
   Widget build(BuildContext context) {
     return _SettingsScaffold(
       title: 'Monitoring',
       children: [
-        FutureBuilder<(bool, SavedCredentials?)>(
-          future: () async {
-            final running = await BackgroundMonitor.isRunning();
-            final saved = await CredentialStore().read();
-            return (running, saved);
-          }(),
+        FutureBuilder<BackgroundMonitorStatus>(
+          future: _statusFuture,
           builder: (context, snap) {
-            final running = snap.data?.$1 ?? false;
-            final saved = snap.data?.$2;
-            final canStart = saved != null;
+            final status = snap.data;
+            final running = status?.running ?? false;
+            final canStart = status?.hasSavedLogin ?? false;
             return _SettingsCard(
               title: 'Background monitoring',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    running
+                    status == null
+                        ? 'Checking monitoring status...'
+                        : running
                         ? 'Running as an Android foreground service. It waits for Dexcom\'s usual five-minute cadence, then probes every 30 seconds until a new reading arrives.'
                         : canStart
                         ? 'Stopped. Start monitoring to keep alarms active when the app is closed.'
                         : 'Saved login is required before background monitoring can run after the app closes.',
                   ),
                   const SizedBox(height: 12),
+                  if (status != null) ...[
+                    _StatusRow(
+                      icon: Icons.key_outlined,
+                      label: 'Saved login',
+                      ok: status.hasSavedLogin,
+                      detail: status.hasSavedLogin
+                          ? 'Available for restart after reboot or app update'
+                          : 'Turn on Remember login when signing in',
+                    ),
+                    _StatusRow(
+                      icon: Icons.notifications_active_outlined,
+                      label: 'Notifications',
+                      ok: status.notificationPermissionGranted,
+                      detail: status.notificationPermissionGranted
+                          ? 'Allowed'
+                          : 'Required for Android background alarms',
+                    ),
+                    _StatusRow(
+                      icon: Icons.battery_saver_outlined,
+                      label: 'Battery use',
+                      ok: status.ignoringBatteryOptimizations,
+                      detail: status.ignoringBatteryOptimizations
+                          ? 'Unrestricted by Android battery optimization'
+                          : 'Set Teddycom to unrestricted or not optimized',
+                    ),
+                    _StatusRow(
+                      icon: Icons.restart_alt,
+                      label: 'Auto restart',
+                      ok: !status.userPaused && status.running,
+                      detail: status.userPaused
+                          ? 'Paused until you start monitoring again'
+                          : status.running
+                          ? 'Enabled for reboot, app update, and service restart'
+                          : 'Starts after you press Start monitoring',
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  FilledButton.icon(
+                    onPressed: _serviceBusy || status == null
+                        ? null
+                        : () async {
+                            await BackgroundMonitor.ensureInitialized();
+                            final permission =
+                                await FlutterForegroundTask.requestNotificationPermission();
+                            if (context.mounted &&
+                                permission != NotificationPermission.granted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Notification permission is required for background alarms.',
+                                  ),
+                                ),
+                              );
+                            }
+                            if (context.mounted) {
+                              setState(_reloadStatus);
+                            }
+                          },
+                    icon: const Icon(Icons.notifications_active_outlined),
+                    label: const Text('Allow notifications'),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: _serviceBusy || status == null
+                        ? null
+                        : () async {
+                            final opened =
+                                await BackgroundMonitor.requestIgnoreBatteryOptimization();
+                            if (context.mounted && !opened) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Could not open battery settings on this device.',
+                                  ),
+                                ),
+                              );
+                            }
+                            if (context.mounted) {
+                              setState(_reloadStatus);
+                            }
+                          },
+                    icon: const Icon(Icons.battery_saver_outlined),
+                    label: const Text('Open battery settings'),
+                  ),
+                  const SizedBox(height: 8),
                   FilledButton.icon(
                     onPressed: _serviceBusy || (!running && !canStart)
                         ? null
@@ -78,7 +171,10 @@ class _BackgroundSettingsScreenState extends State<BackgroundSettingsScreen> {
                               if (context.mounted) setState(() {});
                             } finally {
                               if (context.mounted) {
-                                setState(() => _serviceBusy = false);
+                                setState(() {
+                                  _serviceBusy = false;
+                                  _reloadStatus();
+                                });
                               }
                             }
                           },
@@ -95,6 +191,12 @@ class _BackgroundSettingsScreenState extends State<BackgroundSettingsScreen> {
               ),
             );
           },
+        ),
+        const _SettingsCard(
+          title: 'Keep alarms alive',
+          child: Text(
+            'For the most reliable Android background alarms, allow notifications, set Teddycom battery use to unrestricted or not optimized, avoid force-stopping the app, and confirm the monitoring notification stays visible after reboot or app update.',
+          ),
         ),
       ],
     );
@@ -505,6 +607,63 @@ class _SettingsScaffold extends StatelessWidget {
 }
 
 enum _SettingsCardTone { normal, warning }
+
+class _StatusRow extends StatelessWidget {
+  const _StatusRow({
+    required this.icon,
+    required this.label,
+    required this.ok,
+    required this.detail,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool ok;
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final color = ok ? scheme.primary : scheme.tertiary;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: scheme.onSurface,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  detail,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurface.withValues(alpha: 0.68),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Icon(
+            ok ? Icons.check_circle : Icons.error_outline,
+            color: color,
+            size: 20,
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _SettingsCard extends StatelessWidget {
   const _SettingsCard({

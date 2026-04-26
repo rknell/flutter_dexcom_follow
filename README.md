@@ -12,7 +12,7 @@ This project is **not** affiliated with, endorsed by, or supported by Dexcom. Us
 - Shows a selectable 20-minute prediction when enough recent readings are available.
 - Draws alarm threshold lines on the glucose chart.
 - Stores alarm, prediction, display, and account settings locally on the device.
-- Can remember the Dexcom login locally if enabled. This is convenient for background monitoring, but it is not secure storage.
+- Can remember the Dexcom login locally if enabled using platform secure storage. This is convenient for background monitoring, but no local credential storage should be treated as risk-free.
 - Runs Android background monitoring as a foreground service when saved login is enabled.
 - Waits for Dexcom's usual five-minute data cadence, then probes every 30 seconds until a new reading arrives.
 - Shows monitoring and alarm notifications on Android.
@@ -25,6 +25,7 @@ This project is **not** affiliated with, endorsed by, or supported by Dexcom. Us
 - Critical low alarms at or below 3.1 mmol/L always run, even if standard alarms are disabled.
 - Predicted low alarms are configurable and only run when the selected prediction algorithm reports good-quality recent data, using a distinct short-beep pattern.
 - Background alarms require Android notification permission and can be affected by OEM battery restrictions.
+- For best Android reliability, allow notifications, keep Teddycom's battery use unrestricted/not optimized, avoid force-stopping the app, and check that the monitoring notification returns after reboot or app update.
 
 ## Requirements
 
@@ -101,7 +102,7 @@ If a device previously had a build installed with the old package ID `com.exampl
 
 ## Security and privacy
 
-- Dexcom username and password are stored on-device only when the user enables remembered login (see `lib/app/credentials.dart`).
+- Dexcom username and password are stored on-device only when the user enables remembered login, using platform secure storage where available (see `lib/app/credentials.dart`).
 - Saved login is needed for background monitoring to auto-start after sign-in or reboot.
 - Use "Log out and clear saved login" or "Clear saved login" to remove saved credentials from the device.
 - Do not commit `android/local.properties`, keystores, `key.properties`, or environment files containing real credentials. See [SECURITY.md](SECURITY.md).

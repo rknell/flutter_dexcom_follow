@@ -123,8 +123,49 @@ class BackgroundMonitor {
         autoRunOnMyPackageReplaced: true,
         allowWakeLock: true,
         allowWifiLock: true,
+        allowAutoRestart: true,
+        stopWithTask: false,
       ),
     );
+  }
+
+  static Future<BackgroundMonitorStatus> status() async {
+    final saved = await CredentialStore().read();
+    final running = await isRunning();
+    final notificationPermission =
+        (!kIsWeb && defaultTargetPlatform == TargetPlatform.android)
+        ? await FlutterForegroundTask.checkNotificationPermission()
+        : NotificationPermission.granted;
+    final ignoringBatteryOptimizations =
+        (!kIsWeb && defaultTargetPlatform == TargetPlatform.android)
+        ? await FlutterForegroundTask.isIgnoringBatteryOptimizations
+        : true;
+    final userPaused = await isUserPaused();
+    return BackgroundMonitorStatus(
+      running: running,
+      hasSavedLogin: saved != null,
+      userPaused: userPaused,
+      notificationPermissionGranted:
+          notificationPermission == NotificationPermission.granted,
+      ignoringBatteryOptimizations: ignoringBatteryOptimizations,
+    );
+  }
+
+  static Future<bool> requestIgnoreBatteryOptimization() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return true;
+    try {
+      final requested =
+          await FlutterForegroundTask.requestIgnoreBatteryOptimization();
+      if (requested) return true;
+      return FlutterForegroundTask.openIgnoreBatteryOptimizationSettings();
+    } catch (_) {
+      return FlutterForegroundTask.openIgnoreBatteryOptimizationSettings();
+    }
+  }
+
+  static Future<bool> openBatteryOptimizationSettings() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return true;
+    return FlutterForegroundTask.openIgnoreBatteryOptimizationSettings();
   }
 
   static Future<ServiceRequestResult> start() async {
@@ -154,6 +195,28 @@ class BackgroundMonitor {
       FlutterForegroundTask.stopService();
 
   static Future<bool> isRunning() => FlutterForegroundTask.isRunningService;
+}
+
+class BackgroundMonitorStatus {
+  const BackgroundMonitorStatus({
+    required this.running,
+    required this.hasSavedLogin,
+    required this.userPaused,
+    required this.notificationPermissionGranted,
+    required this.ignoringBatteryOptimizations,
+  });
+
+  final bool running;
+  final bool hasSavedLogin;
+  final bool userPaused;
+  final bool notificationPermissionGranted;
+  final bool ignoringBatteryOptimizations;
+
+  bool get isReady =>
+      hasSavedLogin &&
+      running &&
+      notificationPermissionGranted &&
+      ignoringBatteryOptimizations;
 }
 
 @pragma('vm:entry-point')

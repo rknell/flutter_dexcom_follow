@@ -132,14 +132,14 @@ class AppState extends ChangeNotifier {
       _sub = repo.watchLatest().listen(
         _handleSnapshot,
         onError: (Object e) {
-          _error = e.toString();
+          _error = _describeError(e);
           notifyListeners();
         },
       );
 
       _handleSnapshot(first);
     } catch (e) {
-      _error = e.toString();
+      _error = _describeError(e);
       _phase = AppPhase.loggedOut;
       notifyListeners();
       await _disposeRepo();
@@ -179,7 +179,7 @@ class AppState extends ChangeNotifier {
       _handleSnapshot(snapshot);
       unawaited(_refreshHistory());
     } catch (e) {
-      _error = e.toString();
+      _error = _describeError(e);
       notifyListeners();
     }
   }
@@ -204,7 +204,7 @@ class AppState extends ChangeNotifier {
         nowUtc: DateTime.now().toUtc(),
       );
     } catch (e) {
-      _historyError = e.toString();
+      _historyError = _describeError(e);
     } finally {
       _isHistoryLoading = false;
       notifyListeners();
@@ -376,4 +376,23 @@ class AppState extends ChangeNotifier {
     unawaited(_disposeRepo());
     super.dispose();
   }
+}
+
+String _describeError(Object error) {
+  final message = error.toString();
+  if (message.contains('timed out')) {
+    return 'Dexcom did not respond in time. Check connectivity and try again.';
+  }
+  if (message.contains('status: 401') || message.contains('status: 403')) {
+    return 'Dexcom rejected the sign-in. Check the username, password, and selected server.';
+  }
+  if (message.contains('SocketException') ||
+      message.contains('Connection refused') ||
+      message.contains('Failed host lookup')) {
+    return 'Network error while contacting Dexcom. Check internet connectivity.';
+  }
+  if (message.contains('Dexcom returned no glucose entries')) {
+    return 'Dexcom returned no recent glucose readings.';
+  }
+  return message;
 }
