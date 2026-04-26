@@ -26,16 +26,22 @@ String trendArrowForNotification(Trend trend) => switch (trend) {
   Trend.doubledown => '↓↓',
 };
 
-String predictionTextForNotification(PredictionResult? prediction) {
+String predictionTextForNotification(
+  PredictionResult? prediction, {
+  GlucoseUnit unit = GlucoseUnit.mmol,
+}) {
   final points = prediction?.nextPoints;
   if (points == null || points.isEmpty) {
     return '20-min prediction unavailable';
   }
-  return 'Predicted ${formatMmol(points.last.mmol)} mmol/L in 20 min';
+  return 'Predicted ${formatGlucoseMmol(points.last.mmol, unit)} ${unit.displayName} in 20 min';
 }
 
-String predictedLowTextForNotification(double predictedMmol) {
-  return 'Predicted ${formatMmol(predictedMmol)} mmol/L in 20 min - predicted low alert';
+String predictedLowTextForNotification(
+  double predictedMmol, {
+  GlucoseUnit unit = GlucoseUnit.mmol,
+}) {
+  return 'Predicted ${formatGlucoseMmol(predictedMmol, unit)} ${unit.displayName} in 20 min - predicted low alert';
 }
 
 class BackgroundMonitor {
@@ -103,7 +109,7 @@ class BackgroundMonitor {
       ),
       iosNotificationOptions: const IOSNotificationOptions(),
       foregroundTaskOptions: ForegroundTaskOptions(
-        eventAction: ForegroundTaskEventAction.repeat(300000), // 5 minutes
+        eventAction: ForegroundTaskEventAction.repeat(30000),
         autoRunOnBoot: true,
         autoRunOnMyPackageReplaced: true,
         allowWakeLock: true,
@@ -154,6 +160,7 @@ class DexcomTaskHandler extends TaskHandler {
 
   /// Timestamp of the last reading shown on the FGS notification (Dexcom `latest.timestamp`).
   String? _lastForegroundReadingTimestamp;
+  DateTime? _nextProbeNotBefore;
 
   final _creds = CredentialStore();
   final _settingsStore = AlarmSettingsStore();
@@ -174,7 +181,7 @@ class DexcomTaskHandler extends TaskHandler {
     _client ??= DexcomClient(
       username: saved.username,
       password: saved.password,
-      server: 'eu',
+      server: saved.server,
     );
   }
 
@@ -200,6 +207,12 @@ class DexcomTaskHandler extends TaskHandler {
         return;
       }
 
+      final nowUtc = DateTime.now().toUtc();
+      final nextProbe = _nextProbeNotBefore;
+      if (nextProbe != null && nowUtc.isBefore(nextProbe)) {
+        return;
+      }
+
       final list = await client.getEstimatedGlucoseValues(
         const LatestGlucoseOptions(maxCount: 8, minutes: 1440),
       );
@@ -212,6 +225,7 @@ class DexcomTaskHandler extends TaskHandler {
       }
       final settings = await _settingsStore.read();
       final latest = list.first;
+      _scheduleNextProbe(latest);
       final historyOldestFirst = list.reversed.toList(growable: false);
       final prediction = predictNext20Minutes(
         historyOldestFirst: historyOldestFirst,
@@ -224,6 +238,7 @@ class DexcomTaskHandler extends TaskHandler {
         await _syncForegroundNotification(
           latest: latest,
           prediction: prediction,
+          unit: settings.glucoseUnit,
         );
         _lastForegroundReadingTimestamp = readingTs;
         if (newDexcomReading) {
@@ -232,7 +247,6 @@ class DexcomTaskHandler extends TaskHandler {
       }
 
       final criticalLow = latest.mmol <= kCriticalLowMmol;
-      final nowUtc = DateTime.now().toUtc();
       final predictionPoints = prediction?.nextPoints;
       final predictedMmol = predictionPoints == null || predictionPoints.isEmpty
           ? null
@@ -242,6 +256,8 @@ class DexcomTaskHandler extends TaskHandler {
         predictedMmol: predictedMmol,
         now: nowUtc,
         predictionCanAlarm: prediction?.quality.canAlarm ?? false,
+        isEnabled: settings.predictionAlarmEnabled,
+        thresholdMmol: settings.predictionAlarmMmol,
       );
       if (!settings.enabled &&
           !settings.staleAlarmEnabled &&
@@ -272,12 +288,12 @@ class DexcomTaskHandler extends TaskHandler {
           notifId = 2002;
           title = 'CRITICAL LOW glucose';
           body =
-              '${latest.mmol.toStringAsFixed(1)} mmol/L $arrow — treat hypoglycaemia urgently';
+              '${formatGlucoseEntry(latest, settings.glucoseUnit)} ${settings.glucoseUnit.displayName} $arrow - treat hypoglycaemia urgently';
         } else if (predictedLow.shouldTrigger && predictedMmol != null) {
           notifId = 2003;
           title = 'Predicted low glucose';
           body =
-              '${latest.mmol.toStringAsFixed(1)} mmol/L $arrow now. ${predictedLowTextForNotification(predictedMmol)}';
+              '${formatGlucoseEntry(latest, settings.glucoseUnit)} ${settings.glucoseUnit.displayName} $arrow now. ${predictedLowTextForNotification(predictedMmol, unit: settings.glucoseUnit)}';
           _alarmState = _alarmState.copyWith(
             lastPredictedLowAlarmAt: nowUtc,
             lastAlarmedTimestampIsoUtc: latest.timestamp,
@@ -291,7 +307,8 @@ class DexcomTaskHandler extends TaskHandler {
         } else {
           notifId = 2001;
           title = 'Glucose alarm';
-          body = '${latest.mmol.toStringAsFixed(1)} mmol/L $arrow';
+          body =
+              '${formatGlucoseEntry(latest, settings.glucoseUnit)} ${settings.glucoseUnit.displayName} $arrow';
         }
         final playNotificationSound =
             !(predictedLow.shouldTrigger &&
@@ -324,11 +341,32 @@ class DexcomTaskHandler extends TaskHandler {
   Future<void> _syncForegroundNotification({
     required GlucoseEntry latest,
     required PredictionResult? prediction,
+    GlucoseUnit unit = GlucoseUnit.mmol,
   }) async {
     final arrow = trendArrowForNotification(latest.trend);
-    final title = '${latest.mmol.toStringAsFixed(1)} mmol/L $arrow';
-    final subtitle = predictionTextForNotification(prediction);
+    final title =
+        '${formatGlucoseEntry(latest, unit)} ${unit.displayName} $arrow';
+    final subtitle = predictionTextForNotification(prediction, unit: unit);
     await _updateForegroundNotification(title: title, text: subtitle);
+  }
+
+  void _scheduleNextProbe(GlucoseEntry latest) {
+    final nowUtc = DateTime.now().toUtc();
+    final readingUtc = DateTime.tryParse(latest.timestamp)?.toUtc();
+    if (readingUtc == null) {
+      _nextProbeNotBefore = nowUtc.add(const Duration(seconds: 30));
+      return;
+    }
+
+    final isNewReading = latest.timestamp != _lastForegroundReadingTimestamp;
+    if (isNewReading) {
+      final nextUsefulProbe = readingUtc.add(const Duration(minutes: 5));
+      _nextProbeNotBefore = nextUsefulProbe.isAfter(nowUtc)
+          ? nextUsefulProbe
+          : nowUtc.add(const Duration(seconds: 30));
+    } else {
+      _nextProbeNotBefore = nowUtc.add(const Duration(seconds: 30));
+    }
   }
 
   @override

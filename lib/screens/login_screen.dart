@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../app/alarm_settings.dart';
 import '../app/app_state.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -16,6 +17,8 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _rememberMe = true;
   bool _submitted = false;
   bool _obscurePassword = true;
+  DexcomShareServer? _server;
+  bool _initializedFromState = false;
 
   @override
   void dispose() {
@@ -31,10 +34,15 @@ class _LoginScreenState extends State<LoginScreen> {
     if (username.isEmpty || password.isEmpty) return;
 
     final state = context.read<AppState>();
+    final server = _server ?? state.alarmSettings.server;
+    await state.updateAlarmSettings(
+      state.alarmSettings.copyWith(server: server),
+    );
     await state.login(
       username: username,
       password: password,
       rememberMe: _rememberMe,
+      server: server.storageValue,
     );
   }
 
@@ -42,6 +50,11 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
     final scheme = Theme.of(context).colorScheme;
+    if (!_initializedFromState) {
+      _initializedFromState = true;
+      _server = state.alarmSettings.server;
+    }
+    final selectedServer = _server ?? state.alarmSettings.server;
 
     final usernameError = _submitted && _usernameController.text.trim().isEmpty
         ? 'Enter your Dexcom username'
@@ -172,6 +185,26 @@ class _LoginScreenState extends State<LoginScreen> {
                                       onSubmitted: (_) => _submit(),
                                     ),
                                     const SizedBox(height: 10),
+                                    DropdownButtonFormField<DexcomShareServer>(
+                                      initialValue: selectedServer,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Dexcom server',
+                                        prefixIcon: Icon(Icons.public),
+                                      ),
+                                      items: DexcomShareServer.values
+                                          .map(
+                                            (server) => DropdownMenuItem(
+                                              value: server,
+                                              child: Text(server.displayName),
+                                            ),
+                                          )
+                                          .toList(growable: false),
+                                      onChanged: (server) {
+                                        if (server == null) return;
+                                        setState(() => _server = server);
+                                      },
+                                    ),
+                                    const SizedBox(height: 10),
                                     Row(
                                       children: [
                                         Switch(
@@ -231,25 +264,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                       ),
                                     ),
                                     const SizedBox(height: 8),
-                                    TextButton.icon(
-                                      onPressed: () =>
-                                          state.logout(clearSaved: true),
-                                      icon: const Icon(Icons.delete_outline),
-                                      label: const Text('Clear saved login'),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Server: EU/International',
-                                      textAlign: TextAlign.center,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .labelMedium
-                                          ?.copyWith(
-                                            color: scheme.onSurface.withValues(
-                                              alpha: 0.65,
-                                            ),
-                                          ),
-                                    ),
                                   ],
                                 ),
                               ),

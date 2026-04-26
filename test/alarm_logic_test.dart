@@ -152,7 +152,7 @@ void main() {
           lastCriticalLowAlarmAt: DateTime.utc(2026, 4, 8, 10, 0, 0),
         ),
         mmol: 2.8,
-        now: DateTime.utc(2026, 4, 8, 10, 0, 16),
+        now: DateTime.utc(2026, 4, 8, 10, 1, 0),
       );
       expect(decision.shouldTrigger, true);
     });
@@ -228,6 +228,17 @@ void main() {
         expect(decision.reason, 'predicted-low-repeat-interval');
       },
     );
+
+    test('FEATURE: predicted-low alarm can be disabled', () {
+      final decision = evaluatePredictedLowAlarm(
+        state: const AlarmState(),
+        predictedMmol: 2.8,
+        now: DateTime.utc(2026, 4, 8, 10, 0, 0),
+        isEnabled: false,
+      );
+      expect(decision.shouldTrigger, false);
+      expect(decision.reason, 'prediction-disabled');
+    });
 
     test('FEATURE: predicted-low can retrigger after repeat interval', () {
       final decision = evaluatePredictedLowAlarm(

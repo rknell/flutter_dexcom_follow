@@ -6,9 +6,9 @@ import 'app/app_state.dart';
 import 'app/background_monitor.dart';
 import 'app/credentials.dart';
 import 'app/theme.dart';
-import 'screens/alarm_config_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/settings_screens.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,7 +28,15 @@ class DexcomFollowApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         title: 'Teddycom',
         theme: buildAppTheme(),
-        routes: {AlarmConfigScreen.routeName: (_) => const AlarmConfigScreen()},
+        routes: {
+          BackgroundSettingsScreen.routeName: (_) =>
+              const BackgroundSettingsScreen(),
+          AlarmSettingsScreen.routeName: (_) => const AlarmSettingsScreen(),
+          PredictionSettingsScreen.routeName: (_) =>
+              const PredictionSettingsScreen(),
+          DisplaySettingsScreen.routeName: (_) => const DisplaySettingsScreen(),
+          AccountSettingsScreen.routeName: (_) => const AccountSettingsScreen(),
+        },
         home: const _AppRoot(),
       ),
     );

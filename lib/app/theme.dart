@@ -23,4 +23,3 @@ ThemeData buildAppTheme() {
     ),
   );
 }
-

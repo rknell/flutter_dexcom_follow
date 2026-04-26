@@ -69,6 +69,7 @@ class AppState extends ChangeNotifier {
         username: saved.username,
         password: saved.password,
         rememberMe: saved.rememberMe,
+        server: saved.server,
       );
       return;
     }
@@ -80,6 +81,7 @@ class AppState extends ChangeNotifier {
     required String username,
     required String password,
     required bool rememberMe,
+    String? server,
   }) async {
     _error = null;
     _rememberMe = rememberMe;
@@ -91,7 +93,7 @@ class AppState extends ChangeNotifier {
     final repo = DexcomShareRepository(
       username: username,
       password: password,
-      server: 'eu',
+      server: server ?? _alarmSettings.server.storageValue,
     );
     _repo = repo;
 
@@ -110,13 +112,19 @@ class AppState extends ChangeNotifier {
             username: username,
             password: password,
             rememberMe: rememberMe,
+            server: server ?? _alarmSettings.server.storageValue,
           ),
         );
         await BackgroundMonitor.setUserPaused(false);
         unawaited(BackgroundMonitor.tryAutoStartIfEligible());
       } else {
         await _credentialStore.write(
-          SavedCredentials(username: '', password: '', rememberMe: rememberMe),
+          SavedCredentials(
+            username: '',
+            password: '',
+            rememberMe: rememberMe,
+            server: server ?? _alarmSettings.server.storageValue,
+          ),
         );
         unawaited(BackgroundMonitor.stop());
       }
@@ -211,11 +219,16 @@ class AppState extends ChangeNotifier {
   }
 
   void _handleSnapshot(GlucoseSnapshot snapshot) {
+    final previousTimestamp = _latest?.entry.timestamp;
     _latest = snapshot;
     _error = null;
     _mergeHistory(snapshot.entry);
     _updatePredictionFromHistory();
     notifyListeners();
+    if (previousTimestamp != null &&
+        previousTimestamp != snapshot.entry.timestamp) {
+      unawaited(_refreshHistory());
+    }
 
     final now = DateTime.now().toUtc();
     final readingTimeUtc = DateTime.tryParse(snapshot.entry.timestamp);
@@ -254,6 +267,8 @@ class AppState extends ChangeNotifier {
       predictedMmol: predictedMmol,
       now: nowLocal,
       predictionCanAlarm: _prediction?.quality.canAlarm ?? false,
+      isEnabled: _alarmSettings.predictionAlarmEnabled,
+      thresholdMmol: _alarmSettings.predictionAlarmMmol,
     );
     if (predictedLow.shouldTrigger) {
       _alarmState = _alarmState.copyWith(

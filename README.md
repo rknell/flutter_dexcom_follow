@@ -6,15 +6,15 @@ This project is **not** affiliated with, endorsed by, or supported by Dexcom. Us
 
 ## Current app behavior
 
-- Signs in to Dexcom Share using the EU/International server.
-- Displays the latest glucose reading in mmol/L with trend direction and local reading time.
+- Signs in to Dexcom Share using the selected EU/International or US server.
+- Displays the latest glucose reading in mmol/L or mg/dL with trend direction and local reading time.
 - Loads up to 24 hours of glucose history for the chart.
 - Shows a selectable 20-minute prediction when enough recent readings are available.
 - Draws alarm threshold lines on the glucose chart.
-- Stores alarm settings locally on the device.
+- Stores alarm, prediction, display, and account settings locally on the device.
 - Can remember the Dexcom login locally if enabled. This is convenient for background monitoring, but it is not secure storage.
 - Runs Android background monitoring as a foreground service when saved login is enabled.
-- Polls in the background about every 5 minutes.
+- Waits for Dexcom's usual five-minute data cadence, then probes every 30 seconds until a new reading arrives.
 - Shows monitoring and alarm notifications on Android.
 
 ## Alarm behavior
@@ -23,7 +23,7 @@ This project is **not** affiliated with, endorsed by, or supported by Dexcom. Us
 - Standard alarms repeat no more than once per minute while glucose remains out of range.
 - Stale-data alarms are enabled by default and trigger when no new reading arrives for more than 15 minutes.
 - Critical low alarms at or below 3.1 mmol/L always run, even if standard alarms are disabled.
-- Predicted critical lows alarm only when the selected prediction algorithm reports good-quality recent data, using a distinct short-beep pattern.
+- Predicted low alarms are configurable and only run when the selected prediction algorithm reports good-quality recent data, using a distinct short-beep pattern.
 - Background alarms require Android notification permission and can be affected by OEM battery restrictions.
 
 ## Requirements

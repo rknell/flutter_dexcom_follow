@@ -2,6 +2,7 @@ import 'package:dexcom_share_api/dexcom_share_api.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
+import '../app/alarm_settings.dart';
 import '../app/glucose_format.dart';
 import '../app/prediction.dart';
 import 'glucose_chart_window.dart';
@@ -13,12 +14,14 @@ class GlucoseHistoryChart extends StatefulWidget {
     this.prediction,
     required this.alarmMinMmol,
     required this.alarmMaxMmol,
+    required this.unit,
   });
 
   final List<GlucoseEntry> history; // oldest-first
   final PredictionResult? prediction;
   final double alarmMinMmol;
   final double alarmMaxMmol;
+  final GlucoseUnit unit;
 
   @override
   State<GlucoseHistoryChart> createState() => _GlucoseHistoryChartState();
@@ -69,21 +72,30 @@ class _GlucoseHistoryChartState extends State<GlucoseHistoryChart> {
 
     final spots = <FlSpot>[];
     for (var i = startIdx; i <= endIdx; i++) {
-      spots.add(FlSpot(i.toDouble(), history[i].mmol));
+      spots.add(
+        FlSpot(
+          i.toDouble(),
+          glucoseDisplayValueFromMmol(history[i].mmol, widget.unit),
+        ),
+      );
     }
 
-    const minY = 2.0;
-    const maxY = 22.0;
+    final minY = widget.unit == GlucoseUnit.mmol ? 2.0 : 36.0;
+    final maxY = widget.unit == GlucoseUnit.mmol ? 22.0 : 396.0;
+    final yInterval = widget.unit == GlucoseUnit.mmol ? 2.0 : 36.0;
 
     final pred = widget.prediction;
     final predSpots = <FlSpot>[];
     if (pred != null && pred.nextPoints.isNotEmpty) {
       final lastIdx = (history.length - 1).toDouble();
-      final lastY = history.last.mmol;
+      final lastY = glucoseDisplayValueFromMmol(history.last.mmol, widget.unit);
       predSpots.add(FlSpot(lastIdx, lastY));
       for (var i = 0; i < pred.nextPoints.length; i++) {
         predSpots.add(
-          FlSpot(lastIdx + (i + 1).toDouble(), pred.nextPoints[i].mmol),
+          FlSpot(
+            lastIdx + (i + 1).toDouble(),
+            glucoseDisplayValueFromMmol(pred.nextPoints[i].mmol, widget.unit),
+          ),
         );
       }
     }
@@ -115,7 +127,7 @@ class _GlucoseHistoryChartState extends State<GlucoseHistoryChart> {
                   gridData: FlGridData(
                     show: true,
                     drawVerticalLine: false,
-                    horizontalInterval: 2,
+                    horizontalInterval: yInterval,
                     getDrawingHorizontalLine: (value) => FlLine(
                       color: scheme.onSurface.withValues(alpha: 0.10),
                       strokeWidth: 1,
@@ -138,7 +150,7 @@ class _GlucoseHistoryChartState extends State<GlucoseHistoryChart> {
                       sideTitles: SideTitles(
                         showTitles: true,
                         reservedSize: 44,
-                        interval: 2,
+                        interval: yInterval,
                         getTitlesWidget: (value, meta) {
                           return Text(
                             value.toStringAsFixed(0),
@@ -231,7 +243,7 @@ class _GlucoseHistoryChartState extends State<GlucoseHistoryChart> {
                                 entry.timestamp,
                               );
                               return LineTooltipItem(
-                                '${formatMmol(entry.mmol)} mmol/L\n$time',
+                                '${formatGlucoseEntry(entry, widget.unit)} ${widget.unit.displayName}\n$time',
                                 TextStyle(
                                   color: scheme.onSurface,
                                   fontWeight: FontWeight.w700,
@@ -289,7 +301,10 @@ class _GlucoseHistoryChartState extends State<GlucoseHistoryChart> {
                   extraLinesData: ExtraLinesData(
                     horizontalLines: [
                       HorizontalLine(
-                        y: widget.alarmMinMmol,
+                        y: glucoseDisplayValueFromMmol(
+                          widget.alarmMinMmol,
+                          widget.unit,
+                        ),
                         color: scheme.error.withValues(alpha: 0.55),
                         strokeWidth: 1.5,
                         dashArray: [6, 6],
@@ -302,12 +317,17 @@ class _GlucoseHistoryChartState extends State<GlucoseHistoryChart> {
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
                           ),
-                          labelResolver: (_) =>
-                              widget.alarmMinMmol.toStringAsFixed(1),
+                          labelResolver: (_) => formatGlucoseMmol(
+                            widget.alarmMinMmol,
+                            widget.unit,
+                          ),
                         ),
                       ),
                       HorizontalLine(
-                        y: widget.alarmMaxMmol,
+                        y: glucoseDisplayValueFromMmol(
+                          widget.alarmMaxMmol,
+                          widget.unit,
+                        ),
                         color: scheme.tertiary.withValues(alpha: 0.55),
                         strokeWidth: 1.5,
                         dashArray: [6, 6],
@@ -320,8 +340,10 @@ class _GlucoseHistoryChartState extends State<GlucoseHistoryChart> {
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
                           ),
-                          labelResolver: (_) =>
-                              widget.alarmMaxMmol.toStringAsFixed(1),
+                          labelResolver: (_) => formatGlucoseMmol(
+                            widget.alarmMaxMmol,
+                            widget.unit,
+                          ),
                         ),
                       ),
                     ],

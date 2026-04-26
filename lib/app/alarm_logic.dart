@@ -3,7 +3,7 @@
 const double kCriticalLowMmol = 3.1;
 
 /// Critical alarms may repeat more often than standard out-of-range alarms.
-const Duration kCriticalLowRepeatInterval = Duration(seconds: 15);
+const Duration kCriticalLowRepeatInterval = Duration(minutes: 1);
 
 /// Predicted lows are safety alerts, but less urgent than a current critical low.
 const Duration kPredictedLowRepeatInterval = Duration(minutes: 5);
@@ -125,7 +125,16 @@ AlarmDecision evaluatePredictedLowAlarm({
   required double? predictedMmol,
   required DateTime now,
   bool predictionCanAlarm = true,
+  bool isEnabled = true,
+  double thresholdMmol = kPredictedLowAlarmMmol,
 }) {
+  if (!isEnabled) {
+    return const AlarmDecision(
+      shouldTrigger: false,
+      reason: 'prediction-disabled',
+    );
+  }
+
   if (predictedMmol == null) {
     return const AlarmDecision(
       shouldTrigger: false,
@@ -140,7 +149,7 @@ AlarmDecision evaluatePredictedLowAlarm({
     );
   }
 
-  if (predictedMmol > kPredictedLowAlarmMmol) {
+  if (predictedMmol > thresholdMmol) {
     return const AlarmDecision(
       shouldTrigger: false,
       reason: 'prediction-above-critical-low',

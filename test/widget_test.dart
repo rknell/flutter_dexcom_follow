@@ -11,7 +11,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_dexcom_follow/main.dart';
 
 void main() {
-  testWidgets('FEATURE: app boots to login screen', (WidgetTester tester) async {
+  testWidgets('FEATURE: app boots to login screen', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     await tester.pumpWidget(const DexcomFollowApp());
     await tester.pumpAndSettle();

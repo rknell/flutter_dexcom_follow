@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../screens/alarm_config_screen.dart';
+import '../screens/settings_screens.dart';
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
@@ -57,10 +57,50 @@ class AppDrawer extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.notifications_active_outlined),
-              title: const Text('Alarm configuration'),
+              title: const Text('Alarms'),
               onTap: () {
                 Navigator.of(context).pop();
-                Navigator.of(context).pushNamed(AlarmConfigScreen.routeName);
+                Navigator.of(context).pushNamed(AlarmSettingsScreen.routeName);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.monitor_heart_outlined),
+              title: const Text('Background'),
+              onTap: () {
+                Navigator.of(context).pop();
+                Navigator.of(
+                  context,
+                ).pushNamed(BackgroundSettingsScreen.routeName);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.auto_graph),
+              title: const Text('Prediction'),
+              onTap: () {
+                Navigator.of(context).pop();
+                Navigator.of(
+                  context,
+                ).pushNamed(PredictionSettingsScreen.routeName);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.tune),
+              title: const Text('Display'),
+              onTap: () {
+                Navigator.of(context).pop();
+                Navigator.of(
+                  context,
+                ).pushNamed(DisplaySettingsScreen.routeName);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.account_circle_outlined),
+              title: const Text('Account'),
+              onTap: () {
+                Navigator.of(context).pop();
+                Navigator.of(
+                  context,
+                ).pushNamed(AccountSettingsScreen.routeName);
               },
             ),
           ],

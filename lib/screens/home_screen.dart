@@ -2,6 +2,7 @@ import 'package:dexcom_share_api/dexcom_share_api.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../app/alarm_settings.dart';
 import '../app/app_state.dart';
 import '../app/dexcom_repository.dart';
 import '../app/glucose_format.dart';
@@ -55,15 +56,22 @@ class HomeScreen extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.all(18),
               children: [
-                _HeroGlucoseCard(snapshot: snapshot),
+                _HeroGlucoseCard(
+                  snapshot: snapshot,
+                  unit: state.alarmSettings.glucoseUnit,
+                ),
                 const SizedBox(height: 12),
-                _PredictionCard(prediction: state.prediction),
+                _PredictionCard(
+                  prediction: state.prediction,
+                  unit: state.alarmSettings.glucoseUnit,
+                ),
                 const SizedBox(height: 12),
                 GlucoseHistoryChart(
                   history: state.history,
                   prediction: state.prediction,
                   alarmMinMmol: state.alarmSettings.minMmol,
                   alarmMaxMmol: state.alarmSettings.maxMmol,
+                  unit: state.alarmSettings.glucoseUnit,
                 ),
                 const SizedBox(height: 12),
                 if (state.error != null)
@@ -90,9 +98,10 @@ class HomeScreen extends StatelessWidget {
 }
 
 class _HeroGlucoseCard extends StatelessWidget {
-  const _HeroGlucoseCard({required this.snapshot});
+  const _HeroGlucoseCard({required this.snapshot, required this.unit});
 
   final GlucoseSnapshot? snapshot;
+  final GlucoseUnit unit;
 
   @override
   Widget build(BuildContext context) {
@@ -168,7 +177,7 @@ class _HeroGlucoseCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  formatMmol(mmol),
+                  formatGlucoseEntry(entry, unit),
                   style: Theme.of(context).textTheme.displayLarge?.copyWith(
                     fontWeight: FontWeight.w900,
                     height: 0.95,
@@ -178,7 +187,7 @@ class _HeroGlucoseCard extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: Text(
-                    'mmol/L',
+                    unit.displayName,
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       color: scheme.onSurface.withValues(alpha: 0.78),
                       fontWeight: FontWeight.w700,
@@ -207,9 +216,10 @@ class _HeroGlucoseCard extends StatelessWidget {
 }
 
 class _PredictionCard extends StatelessWidget {
-  const _PredictionCard({required this.prediction});
+  const _PredictionCard({required this.prediction, required this.unit});
 
   final PredictionResult? prediction;
+  final GlucoseUnit unit;
 
   @override
   Widget build(BuildContext context) {
@@ -254,7 +264,7 @@ class _PredictionCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '${formatMmol(p20.mmol)} mmol/L in 20 min',
+                    '${formatGlucoseMmol(p20.mmol, unit)} ${unit.displayName} in 20 min',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: scheme.onSurface.withValues(alpha: 0.80),
                     ),

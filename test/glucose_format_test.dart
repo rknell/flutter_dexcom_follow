@@ -8,4 +8,3 @@ void main() {
     expect(formatMmol(5.06), '5.1');
   });
 }
-

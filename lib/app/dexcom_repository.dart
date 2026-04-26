@@ -24,26 +24,27 @@ class DexcomShareRepository implements DexcomRepository {
     required String username,
     required String password,
     required String server,
-    Duration pollInterval = const Duration(minutes: 5),
-  })  : _client = DexcomClient(
-          username: username,
-          password: password,
-          server: server,
-        ),
-        _pollInterval = pollInterval;
+    Duration dexcomCadence = const Duration(minutes: 5),
+    Duration probeInterval = const Duration(seconds: 30),
+  }) : _client = DexcomClient(
+         username: username,
+         password: password,
+         server: server,
+       ),
+       _dexcomCadence = dexcomCadence,
+       _probeInterval = probeInterval;
 
   final DexcomClient _client;
-  final Duration _pollInterval;
+  final Duration _dexcomCadence;
+  final Duration _probeInterval;
 
   final _controller = StreamController<GlucoseSnapshot>.broadcast();
   Timer? _timer;
   bool _isRefreshing = false;
+  String? _lastEmittedTimestamp;
 
   @override
   Stream<GlucoseSnapshot> watchLatest() {
-    _timer ??= Timer.periodic(_pollInterval, (_) {
-      unawaited(_refreshAndEmit());
-    });
     unawaited(_refreshAndEmit());
     return _controller.stream;
   }
@@ -76,9 +77,41 @@ class DexcomShareRepository implements DexcomRepository {
     try {
       final snapshot = await refreshOnce();
       if (!_controller.isClosed) _controller.add(snapshot);
+      _scheduleNextProbe(snapshot);
+    } catch (e, st) {
+      if (!_controller.isClosed) _controller.addError(e, st);
+      _scheduleRetryProbe();
     } finally {
       _isRefreshing = false;
     }
+  }
+
+  void _scheduleRetryProbe() {
+    _timer?.cancel();
+    if (_controller.isClosed) return;
+    _timer = Timer(_probeInterval, () => unawaited(_refreshAndEmit()));
+  }
+
+  void _scheduleNextProbe(GlucoseSnapshot snapshot) {
+    _timer?.cancel();
+    if (_controller.isClosed) return;
+
+    final readingTime = DateTime.tryParse(snapshot.entry.timestamp)?.toLocal();
+    final now = DateTime.now();
+    final isNewReading = snapshot.entry.timestamp != _lastEmittedTimestamp;
+    _lastEmittedTimestamp = snapshot.entry.timestamp;
+
+    final Duration delay;
+    if (isNewReading && readingTime != null) {
+      final nextUsefulProbe = readingTime.add(_dexcomCadence);
+      delay = nextUsefulProbe.isAfter(now)
+          ? nextUsefulProbe.difference(now)
+          : _probeInterval;
+    } else {
+      delay = _probeInterval;
+    }
+
+    _timer = Timer(delay, () => unawaited(_refreshAndEmit()));
   }
 
   @override
@@ -89,4 +122,3 @@ class DexcomShareRepository implements DexcomRepository {
     await _controller.close();
   }
 }
-

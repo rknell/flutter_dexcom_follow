@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:flutter_dexcom_follow/app/prediction.dart';
+import 'package:flutter_dexcom_follow/app/alarm_settings.dart';
 import 'package:flutter_dexcom_follow/widgets/glucose_history_chart.dart';
 
 GlucoseEntry _entry(int idx) {
@@ -52,6 +53,7 @@ void main() {
                 prediction: prediction,
                 alarmMinMmol: 4.0,
                 alarmMaxMmol: 10.0,
+                unit: GlucoseUnit.mmol,
               ),
             ),
           ),
