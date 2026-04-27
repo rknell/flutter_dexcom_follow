@@ -475,15 +475,26 @@ class _PredictionSettingsScreenState extends State<PredictionSettingsScreen> {
   }
 }
 
-class DisplaySettingsScreen extends StatelessWidget {
+class DisplaySettingsScreen extends StatefulWidget {
   const DisplaySettingsScreen({super.key});
 
   static const routeName = '/settings/display';
 
   @override
+  State<DisplaySettingsScreen> createState() => _DisplaySettingsScreenState();
+}
+
+class _DisplaySettingsScreenState extends State<DisplaySettingsScreen> {
+  double? _idealMin;
+  double? _idealMax;
+
+  @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
     final settings = state.alarmSettings;
+    final unit = settings.glucoseUnit;
+    final idealMin = _idealMin ?? settings.idealMinMmol;
+    final idealMax = _idealMax ?? settings.idealMaxMmol;
 
     return _SettingsScaffold(
       title: 'Units',
@@ -505,10 +516,66 @@ class DisplaySettingsScreen extends StatelessWidget {
             },
           ),
         ),
-        const _SettingsCard(
+        _SettingsCard(
           title: 'History and chart',
-          child: Text(
-            'The app keeps the chart fixed to the available Dexcom Share window: up to 24 hours and 288 readings.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'The app keeps the chart fixed to the available Dexcom Share window: up to 24 hours and 288 readings.',
+              ),
+              const SizedBox(height: 12),
+              _ThresholdControl(
+                label: 'Ideal low',
+                valueMmol: idealMin,
+                minMmol: 1.5,
+                maxMmol: (idealMax - 0.1).clamp(1.5, 10.0).toDouble(),
+                unit: unit,
+                onChanged: (v) => setState(() => _idealMin = v),
+                onSubmitted: (v) {
+                  final next = v.clamp(1.5, idealMax - 0.1).toDouble();
+                  state.updateAlarmSettings(
+                    settings.copyWith(idealMinMmol: next),
+                  );
+                  setState(() => _idealMin = next);
+                },
+              ),
+              _ThresholdControl(
+                label: 'Ideal high',
+                valueMmol: idealMax,
+                minMmol: (idealMin + 0.1).clamp(6.0, 25.0).toDouble(),
+                maxMmol: 25.0,
+                unit: unit,
+                onChanged: (v) => setState(() => _idealMax = v),
+                onSubmitted: (v) {
+                  final next = v.clamp(idealMin + 0.1, 25.0).toDouble();
+                  state.updateAlarmSettings(
+                    settings.copyWith(idealMaxMmol: next),
+                  );
+                  setState(() => _idealMax = next);
+                },
+              ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () {
+                    final defaults = AlarmSettingsStore.defaults;
+                    state.updateAlarmSettings(
+                      settings.copyWith(
+                        idealMinMmol: defaults.idealMinMmol,
+                        idealMaxMmol: defaults.idealMaxMmol,
+                      ),
+                    );
+                    setState(() {
+                      _idealMin = defaults.idealMinMmol;
+                      _idealMax = defaults.idealMaxMmol;
+                    });
+                  },
+                  icon: const Icon(Icons.restore),
+                  label: const Text('Reset ideal zone defaults'),
+                ),
+              ),
+            ],
           ),
         ),
       ],

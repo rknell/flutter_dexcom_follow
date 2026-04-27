@@ -9,6 +9,7 @@ import '../app/background_monitor.dart';
 import '../app/dexcom_repository.dart';
 import '../app/glucose_format.dart';
 import '../app/prediction.dart';
+import '../screens/settings_screens.dart';
 import '../widgets/app_drawer.dart';
 import '../widgets/glucose_history_chart.dart';
 
@@ -53,14 +54,14 @@ class HomeScreen extends StatelessWidget {
                   algorithm: state.alarmSettings.predictionAlgorithm,
                   onTap: () => _showPredictionMethodPicker(context, state),
                 ),
-                const SizedBox(height: 12),
-                const _MonitoringStatusCard(),
-                const SizedBox(height: 12),
+                const _MonitoringWarningSection(),
                 GlucoseHistoryChart(
                   history: state.history,
                   prediction: state.prediction,
                   alarmMinMmol: state.alarmSettings.minMmol,
                   alarmMaxMmol: state.alarmSettings.maxMmol,
+                  idealMinMmol: state.alarmSettings.idealMinMmol,
+                  idealMaxMmol: state.alarmSettings.idealMaxMmol,
                   unit: state.alarmSettings.glucoseUnit,
                 ),
                 const SizedBox(height: 12),
@@ -333,8 +334,8 @@ class _PredictionCard extends StatelessWidget {
   }
 }
 
-class _MonitoringStatusCard extends StatelessWidget {
-  const _MonitoringStatusCard();
+class _MonitoringWarningSection extends StatelessWidget {
+  const _MonitoringWarningSection();
 
   @override
   Widget build(BuildContext context) {
@@ -343,33 +344,38 @@ class _MonitoringStatusCard extends StatelessWidget {
       future: BackgroundMonitor.status(),
       builder: (context, snap) {
         final status = snap.data;
-        final ready = status?.isReady ?? false;
-        final text = status == null
-            ? 'Checking monitoring status...'
-            : ready
-            ? 'Background monitoring ready'
-            : _monitoringIssueText(status);
-        final color = ready ? scheme.primary : scheme.tertiary;
-        return Card(
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(
-              children: [
-                Icon(
-                  ready ? Icons.shield_outlined : Icons.shield_moon_outlined,
-                  color: color,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    text,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: scheme.onSurface.withValues(alpha: 0.78),
-                      fontWeight: FontWeight.w600,
+        if (status == null || status.isReady) {
+          return const SizedBox(height: 12);
+        }
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Card(
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: () => Navigator.of(
+                context,
+              ).pushNamed(BackgroundSettingsScreen.routeName),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Row(
+                  children: [
+                    Icon(Icons.shield_moon_outlined, color: scheme.tertiary),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        _monitoringIssueText(status),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: scheme.onSurface.withValues(alpha: 0.78),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         );

@@ -14,6 +14,8 @@ class GlucoseHistoryChart extends StatefulWidget {
     this.prediction,
     required this.alarmMinMmol,
     required this.alarmMaxMmol,
+    required this.idealMinMmol,
+    required this.idealMaxMmol,
     required this.unit,
   });
 
@@ -21,6 +23,8 @@ class GlucoseHistoryChart extends StatefulWidget {
   final PredictionResult? prediction;
   final double alarmMinMmol;
   final double alarmMaxMmol;
+  final double idealMinMmol;
+  final double idealMaxMmol;
   final GlucoseUnit unit;
 
   @override
@@ -69,6 +73,12 @@ class _GlucoseHistoryChartState extends State<GlucoseHistoryChart> {
     final displayedEndTime = formatLocalTimeFromIsoUtc(
       history[endIdx].timestamp,
     );
+    final visibleHistory = history.sublist(startIdx, endIdx + 1);
+    final stats = _GlucoseRangeStats.fromHistory(
+      visibleHistory,
+      minMmol: widget.idealMinMmol,
+      maxMmol: widget.idealMaxMmol,
+    );
 
     final spots = <FlSpot>[];
     for (var i = startIdx; i <= endIdx; i++) {
@@ -83,6 +93,14 @@ class _GlucoseHistoryChartState extends State<GlucoseHistoryChart> {
     final minY = widget.unit == GlucoseUnit.mmol ? 2.0 : 36.0;
     final maxY = widget.unit == GlucoseUnit.mmol ? 22.0 : 396.0;
     final yInterval = widget.unit == GlucoseUnit.mmol ? 2.0 : 36.0;
+    final idealMinY = glucoseDisplayValueFromMmol(
+      widget.idealMinMmol,
+      widget.unit,
+    );
+    final idealMaxY = glucoseDisplayValueFromMmol(
+      widget.idealMaxMmol,
+      widget.unit,
+    );
 
     final pred = widget.prediction;
     final predSpots = <FlSpot>[];
@@ -124,6 +142,15 @@ class _GlucoseHistoryChartState extends State<GlucoseHistoryChart> {
                   maxX: maxX,
                   minY: minY,
                   maxY: maxY,
+                  rangeAnnotations: RangeAnnotations(
+                    horizontalRangeAnnotations: [
+                      HorizontalRangeAnnotation(
+                        y1: idealMinY,
+                        y2: idealMaxY,
+                        color: scheme.primary.withValues(alpha: 0.08),
+                      ),
+                    ],
+                  ),
                   gridData: FlGridData(
                     show: true,
                     drawVerticalLine: false,
@@ -378,6 +405,45 @@ class _GlucoseHistoryChartState extends State<GlucoseHistoryChart> {
                 ),
               ],
             ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _StatTile(
+                  label: 'In range',
+                  value: _formatPercent(stats.inRangePercent),
+                  color: scheme.primary,
+                ),
+                _StatTile(
+                  label: 'Low',
+                  value: _formatPercent(stats.lowPercent),
+                  color: scheme.error,
+                ),
+                _StatTile(
+                  label: 'High',
+                  value: _formatPercent(stats.highPercent),
+                  color: scheme.tertiary,
+                ),
+                _StatTile(
+                  label: 'Very high',
+                  value: _formatPercent(stats.veryHighPercent),
+                  color: scheme.error,
+                ),
+                _StatTile(
+                  label: 'Hypos',
+                  value: stats.hypoCount.toString(),
+                  color: scheme.error,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Ideal zone ${formatGlucoseMmol(widget.idealMinMmol, widget.unit)}–${formatGlucoseMmol(widget.idealMaxMmol, widget.unit)} ${widget.unit.displayName}. Very high starts at ${formatGlucoseMmol(_veryHighMmol, widget.unit)} ${widget.unit.displayName}.',
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: scheme.onSurface.withValues(alpha: 0.65),
+              ),
+            ),
             if (predSpots.length >= 2) ...[
               const SizedBox(height: 10),
               Text(
@@ -389,6 +455,178 @@ class _GlucoseHistoryChartState extends State<GlucoseHistoryChart> {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+const double _veryHighMmol = 13.9;
+const Duration _defaultReadingInterval = Duration(minutes: 5);
+const Duration _maxReadingInterval = Duration(minutes: 15);
+const Duration _hypoRecoveryPeriod = Duration(minutes: 15);
+
+String _formatPercent(double value) => '${value.round()}%';
+
+class _GlucoseRangeStats {
+  const _GlucoseRangeStats({
+    required this.inRangePercent,
+    required this.lowPercent,
+    required this.highPercent,
+    required this.veryHighPercent,
+    required this.hypoCount,
+  });
+
+  final double inRangePercent;
+  final double lowPercent;
+  final double highPercent;
+  final double veryHighPercent;
+  final int hypoCount;
+
+  static _GlucoseRangeStats fromHistory(
+    List<GlucoseEntry> history, {
+    required double minMmol,
+    required double maxMmol,
+  }) {
+    if (history.isEmpty) {
+      return const _GlucoseRangeStats(
+        inRangePercent: 0,
+        lowPercent: 0,
+        highPercent: 0,
+        veryHighPercent: 0,
+        hypoCount: 0,
+      );
+    }
+
+    var inRangeSeconds = 0.0;
+    var lowSeconds = 0.0;
+    var highSeconds = 0.0;
+    var veryHighSeconds = 0.0;
+    for (var i = 0; i < history.length; i++) {
+      final entry = history[i];
+      final seconds = _entryDuration(history, i).inSeconds.toDouble();
+      if (entry.mmol < minMmol) {
+        lowSeconds += seconds;
+      } else if (entry.mmol > _veryHighMmol) {
+        veryHighSeconds += seconds;
+      } else if (entry.mmol > maxMmol) {
+        highSeconds += seconds;
+      } else {
+        inRangeSeconds += seconds;
+      }
+    }
+
+    final total = inRangeSeconds + lowSeconds + highSeconds + veryHighSeconds;
+    return _GlucoseRangeStats(
+      inRangePercent: inRangeSeconds * 100 / total,
+      lowPercent: lowSeconds * 100 / total,
+      highPercent: highSeconds * 100 / total,
+      veryHighPercent: veryHighSeconds * 100 / total,
+      hypoCount: _countHypoEpisodes(history, minMmol: minMmol),
+    );
+  }
+}
+
+Duration _entryDuration(List<GlucoseEntry> history, int index) {
+  final current = _entryTime(history[index], fallbackIndex: index);
+  final next = index < history.length - 1
+      ? _entryTime(history[index + 1], fallbackIndex: index + 1)
+      : null;
+  final previous = index > 0
+      ? _entryTime(history[index - 1], fallbackIndex: index - 1)
+      : null;
+  final duration = next != null
+      ? next.difference(current)
+      : previous != null
+      ? current.difference(previous)
+      : _defaultReadingInterval;
+  if (duration <= Duration.zero || duration > _maxReadingInterval) {
+    return _defaultReadingInterval;
+  }
+  return duration;
+}
+
+DateTime _entryTime(GlucoseEntry entry, {required int fallbackIndex}) {
+  return DateTime.tryParse(entry.timestamp)?.toUtc() ??
+      DateTime.fromMillisecondsSinceEpoch(
+        fallbackIndex * _defaultReadingInterval.inMilliseconds,
+        isUtc: true,
+      );
+}
+
+int _countHypoEpisodes(List<GlucoseEntry> history, {required double minMmol}) {
+  var count = 0;
+  var episodeOpen = false;
+  DateTime? aboveSince;
+
+  for (var i = 0; i < history.length; i++) {
+    final entry = history[i];
+    final at = _entryTime(entry, fallbackIndex: i);
+
+    if (entry.mmol < minMmol) {
+      if (!episodeOpen) {
+        count++;
+        episodeOpen = true;
+      }
+      aboveSince = null;
+      continue;
+    }
+
+    if (episodeOpen) {
+      aboveSince ??= at;
+      if (at.difference(aboveSince) >= _hypoRecoveryPeriod) {
+        episodeOpen = false;
+        aboveSince = null;
+      }
+    }
+  }
+
+  return count;
+}
+
+class _StatTile extends StatelessWidget {
+  const _StatTile({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: 116,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.24)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            value,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: scheme.onSurface.withValues(alpha: 0.70),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }

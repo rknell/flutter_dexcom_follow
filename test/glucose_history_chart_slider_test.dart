@@ -53,6 +53,8 @@ void main() {
                 prediction: prediction,
                 alarmMinMmol: 4.0,
                 alarmMaxMmol: 10.0,
+                idealMinMmol: 4.0,
+                idealMaxMmol: 10.0,
                 unit: GlucoseUnit.mmol,
               ),
             ),

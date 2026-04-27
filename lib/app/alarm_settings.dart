@@ -54,6 +54,8 @@ class AlarmSettings {
   final bool predictionAlarmEnabled;
   final double predictionAlarmMmol;
   final GlucoseUnit glucoseUnit;
+  final double idealMinMmol;
+  final double idealMaxMmol;
   final DexcomShareServer server;
 
   const AlarmSettings({
@@ -66,6 +68,8 @@ class AlarmSettings {
     required this.predictionAlarmEnabled,
     required this.predictionAlarmMmol,
     required this.glucoseUnit,
+    required this.idealMinMmol,
+    required this.idealMaxMmol,
     required this.server,
   });
 
@@ -79,6 +83,8 @@ class AlarmSettings {
     bool? predictionAlarmEnabled,
     double? predictionAlarmMmol,
     GlucoseUnit? glucoseUnit,
+    double? idealMinMmol,
+    double? idealMaxMmol,
     DexcomShareServer? server,
   }) {
     return AlarmSettings(
@@ -92,6 +98,8 @@ class AlarmSettings {
           predictionAlarmEnabled ?? this.predictionAlarmEnabled,
       predictionAlarmMmol: predictionAlarmMmol ?? this.predictionAlarmMmol,
       glucoseUnit: glucoseUnit ?? this.glucoseUnit,
+      idealMinMmol: idealMinMmol ?? this.idealMinMmol,
+      idealMaxMmol: idealMaxMmol ?? this.idealMaxMmol,
       server: server ?? this.server,
     );
   }
@@ -107,6 +115,8 @@ class AlarmSettingsStore {
   static const _kPredictionAlarmEnabled = 'prediction.alarm.enabled';
   static const _kPredictionAlarmMmol = 'prediction.alarm.mmol';
   static const _kGlucoseUnit = 'display.glucoseUnit';
+  static const _kIdealMin = 'display.idealMinMmol';
+  static const _kIdealMax = 'display.idealMaxMmol';
   static const _kServer = 'dexcom.server';
 
   static const AlarmSettings defaults = AlarmSettings(
@@ -119,6 +129,8 @@ class AlarmSettingsStore {
     predictionAlarmEnabled: true,
     predictionAlarmMmol: 3.05,
     glucoseUnit: GlucoseUnit.mmol,
+    idealMinMmol: 4.0,
+    idealMaxMmol: 10.0,
     server: DexcomShareServer.eu,
   );
 
@@ -142,6 +154,10 @@ class AlarmSettingsStore {
     final glucoseUnit = GlucoseUnitLabel.fromStorageValue(
       prefs.getString(_kGlucoseUnit),
     );
+    final rawIdealMin = prefs.getDouble(_kIdealMin) ?? defaults.idealMinMmol;
+    final rawIdealMax = prefs.getDouble(_kIdealMax) ?? defaults.idealMaxMmol;
+    final idealMin = rawIdealMin.clamp(1.5, 24.9).toDouble();
+    final idealMax = rawIdealMax.clamp(idealMin + 0.1, 25.0).toDouble();
     final server = DexcomShareServerLabel.fromStorageValue(
       prefs.getString(_kServer),
     );
@@ -155,6 +171,8 @@ class AlarmSettingsStore {
       predictionAlarmEnabled: predictionAlarmEnabled,
       predictionAlarmMmol: predictionAlarmMmol.clamp(1.5, min).toDouble(),
       glucoseUnit: glucoseUnit,
+      idealMinMmol: idealMin,
+      idealMaxMmol: idealMax,
       server: server,
     );
   }
@@ -173,6 +191,8 @@ class AlarmSettingsStore {
     await prefs.setBool(_kPredictionAlarmEnabled, s.predictionAlarmEnabled);
     await prefs.setDouble(_kPredictionAlarmMmol, s.predictionAlarmMmol);
     await prefs.setString(_kGlucoseUnit, s.glucoseUnit.storageValue);
+    await prefs.setDouble(_kIdealMin, s.idealMinMmol);
+    await prefs.setDouble(_kIdealMax, s.idealMaxMmol);
     await prefs.setString(_kServer, s.server.storageValue);
   }
 }
