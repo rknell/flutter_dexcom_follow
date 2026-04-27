@@ -23,6 +23,7 @@ class AppState extends ChangeNotifier {
   final CredentialStore _credentialStore;
   final AlarmSettingsStore _alarmSettingsStore;
   final AlarmAudioPlayer _alarmAudio = AlarmAudioPlayer();
+  Timer? _alarmResumeTimer;
 
   AppPhase _phase = AppPhase.initializing;
   AppPhase get phase => _phase;
@@ -61,6 +62,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> init() async {
     _alarmSettings = await _alarmSettingsStore.read();
+    _scheduleAlarmResumeCheck();
     final saved = await _credentialStore.read();
     if (saved != null) {
       _rememberMe = saved.rememberMe;
@@ -163,9 +165,11 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> updateAlarmSettings(AlarmSettings next) async {
+    next = _normalizeAlarmSettings(next);
     _alarmSettings = next;
     _updatePredictionFromHistory();
     await _alarmSettingsStore.write(next);
+    _scheduleAlarmResumeCheck();
     notifyListeners();
   }
 
@@ -360,6 +364,47 @@ class AppState extends ChangeNotifier {
     );
   }
 
+  void _scheduleAlarmResumeCheck() {
+    _alarmResumeTimer?.cancel();
+    final candidates = <DateTime>[
+      if (!_alarmSettings.enabled && _alarmSettings.resumeEnabledAt != null)
+        _alarmSettings.resumeEnabledAt!,
+      if (!_alarmSettings.staleAlarmEnabled &&
+          _alarmSettings.resumeStaleAlarmAt != null)
+        _alarmSettings.resumeStaleAlarmAt!,
+      if (!_alarmSettings.predictionAlarmEnabled &&
+          _alarmSettings.resumePredictionAlarmAt != null)
+        _alarmSettings.resumePredictionAlarmAt!,
+    ];
+    if (candidates.isEmpty) return;
+    candidates.sort();
+    final delay = candidates.first.difference(DateTime.now());
+    _alarmResumeTimer = Timer(
+      delay.isNegative ? Duration.zero : delay,
+      () => unawaited(_reloadAlarmSettingsForResume()),
+    );
+  }
+
+  Future<void> _reloadAlarmSettingsForResume() async {
+    final next = await _alarmSettingsStore.read();
+    _alarmSettings = next;
+    _updatePredictionFromHistory();
+    _scheduleAlarmResumeCheck();
+    notifyListeners();
+  }
+
+  AlarmSettings _normalizeAlarmSettings(AlarmSettings settings) {
+    return settings.copyWith(
+      resumeEnabledAt: settings.enabled ? null : settings.resumeEnabledAt,
+      resumeStaleAlarmAt: settings.staleAlarmEnabled
+          ? null
+          : settings.resumeStaleAlarmAt,
+      resumePredictionAlarmAt: settings.predictionAlarmEnabled
+          ? null
+          : settings.resumePredictionAlarmAt,
+    );
+  }
+
   Future<void> _disposeRepo() async {
     await _sub?.cancel();
     _sub = null;
@@ -372,6 +417,7 @@ class AppState extends ChangeNotifier {
 
   @override
   void dispose() {
+    _alarmResumeTimer?.cancel();
     unawaited(_alarmAudio.close());
     unawaited(_disposeRepo());
     super.dispose();

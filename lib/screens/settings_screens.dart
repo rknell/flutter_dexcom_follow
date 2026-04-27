@@ -217,6 +217,45 @@ class _AlarmSettingsScreenState extends State<AlarmSettingsScreen> {
   double? _max;
   double? _staleAfter;
 
+  Future<void> _toggleRangeAlarm(
+    AppState state,
+    AlarmSettings settings,
+    bool enabled,
+  ) async {
+    if (enabled) {
+      await state.updateAlarmSettings(
+        settings.copyWith(enabled: true, resumeEnabledAt: null),
+      );
+      return;
+    }
+    final resume = await _pickAlarmResumeAt(context);
+    if (!mounted || resume == null) return;
+    await state.updateAlarmSettings(
+      settings.copyWith(enabled: false, resumeEnabledAt: resume.resumeAt),
+    );
+  }
+
+  Future<void> _toggleStaleAlarm(
+    AppState state,
+    AlarmSettings settings,
+    bool enabled,
+  ) async {
+    if (enabled) {
+      await state.updateAlarmSettings(
+        settings.copyWith(staleAlarmEnabled: true, resumeStaleAlarmAt: null),
+      );
+      return;
+    }
+    final resume = await _pickAlarmResumeAt(context);
+    if (!mounted || resume == null) return;
+    await state.updateAlarmSettings(
+      settings.copyWith(
+        staleAlarmEnabled: false,
+        resumeStaleAlarmAt: resume.resumeAt,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
@@ -240,13 +279,16 @@ class _AlarmSettingsScreenState extends State<AlarmSettingsScreen> {
           title: 'Standard range alarms',
           trailing: Switch(
             value: settings.enabled,
-            onChanged: (v) =>
-                state.updateAlarmSettings(settings.copyWith(enabled: v)),
+            onChanged: (v) => _toggleRangeAlarm(state, settings, v),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text('Repeats no more than once per minute while out of range.'),
+              if (!settings.enabled && settings.resumeEnabledAt != null) ...[
+                const SizedBox(height: 8),
+                Text(_formatAlarmResumeAt(settings.resumeEnabledAt!)),
+              ],
               const SizedBox(height: 12),
               FilledButton.icon(
                 onPressed: !settings.enabled ? null : () => state.testAlarm(),
@@ -314,9 +356,7 @@ class _AlarmSettingsScreenState extends State<AlarmSettingsScreen> {
           title: 'Out of sync',
           trailing: Switch(
             value: settings.staleAlarmEnabled,
-            onChanged: (v) => state.updateAlarmSettings(
-              settings.copyWith(staleAlarmEnabled: v),
-            ),
+            onChanged: (v) => _toggleStaleAlarm(state, settings, v),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -324,6 +364,11 @@ class _AlarmSettingsScreenState extends State<AlarmSettingsScreen> {
               Text(
                 'Triggers when no new reading arrives for more than ${staleAfter.round()} minutes.',
               ),
+              if (!settings.staleAlarmEnabled &&
+                  settings.resumeStaleAlarmAt != null) ...[
+                const SizedBox(height: 8),
+                Text(_formatAlarmResumeAt(settings.resumeStaleAlarmAt!)),
+              ],
               Slider(
                 value: staleAfter.clamp(5, 60),
                 min: 5,
@@ -343,6 +388,7 @@ class _AlarmSettingsScreenState extends State<AlarmSettingsScreen> {
                       settings.copyWith(
                         staleAlarmEnabled:
                             AlarmSettingsStore.defaults.staleAlarmEnabled,
+                        resumeStaleAlarmAt: null,
                         staleAfterMinutes:
                             AlarmSettingsStore.defaults.staleAfterMinutes,
                       ),
@@ -366,6 +412,73 @@ class _AlarmSettingsScreenState extends State<AlarmSettingsScreen> {
   }
 }
 
+class _AlarmResumeOption {
+  const _AlarmResumeOption(this.label, this.duration);
+
+  final String label;
+  final Duration? duration;
+
+  DateTime? get resumeAt {
+    final d = duration;
+    if (d == null) return null;
+    return DateTime.now().add(d);
+  }
+}
+
+const _alarmResumeOptions = <_AlarmResumeOption>[
+  _AlarmResumeOption('30 mins', Duration(minutes: 30)),
+  _AlarmResumeOption('1 hour', Duration(hours: 1)),
+  _AlarmResumeOption('2 hours', Duration(hours: 2)),
+  _AlarmResumeOption('4 hours', Duration(hours: 4)),
+  _AlarmResumeOption('8 hours', Duration(hours: 8)),
+  _AlarmResumeOption('16 hours', Duration(hours: 16)),
+  _AlarmResumeOption('24 hours', Duration(hours: 24)),
+  _AlarmResumeOption('Never', null),
+];
+
+Future<_AlarmResumeOption?> _pickAlarmResumeAt(BuildContext context) {
+  return showModalBottomSheet<_AlarmResumeOption>(
+    context: context,
+    showDragHandle: true,
+    builder: (context) {
+      return SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const ListTile(
+              title: Text('Automatically re-enable?'),
+              subtitle: Text('Choose when this alarm should turn back on.'),
+            ),
+            for (final option in _alarmResumeOptions)
+              ListTile(
+                title: Text(option.label),
+                onTap: () => Navigator.of(context).pop(option),
+              ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+String _formatAlarmResumeAt(DateTime resumeAt) {
+  final now = DateTime.now();
+  final remaining = resumeAt.difference(now);
+  if (remaining.inMinutes <= 0) return 'Re-enabling now.';
+  if (remaining.inHours < 1) {
+    return 'Re-enables in ${remaining.inMinutes} minutes.';
+  }
+  if (remaining.inHours < 24) {
+    final hours = remaining.inHours;
+    final minutes = remaining.inMinutes.remainder(60);
+    if (minutes == 0) {
+      return 'Re-enables in $hours ${hours == 1 ? 'hour' : 'hours'}.';
+    }
+    return 'Re-enables in $hours ${hours == 1 ? 'hour' : 'hours'} $minutes minutes.';
+  }
+  return 'Re-enables in ${remaining.inDays} ${remaining.inDays == 1 ? 'day' : 'days'}.';
+}
+
 class PredictionSettingsScreen extends StatefulWidget {
   const PredictionSettingsScreen({super.key});
 
@@ -378,6 +491,30 @@ class PredictionSettingsScreen extends StatefulWidget {
 
 class _PredictionSettingsScreenState extends State<PredictionSettingsScreen> {
   double? _predictionAlarmMmol;
+
+  Future<void> _togglePredictionAlarm(
+    AppState state,
+    AlarmSettings settings,
+    bool enabled,
+  ) async {
+    if (enabled) {
+      await state.updateAlarmSettings(
+        settings.copyWith(
+          predictionAlarmEnabled: true,
+          resumePredictionAlarmAt: null,
+        ),
+      );
+      return;
+    }
+    final resume = await _pickAlarmResumeAt(context);
+    if (!mounted || resume == null) return;
+    await state.updateAlarmSettings(
+      settings.copyWith(
+        predictionAlarmEnabled: false,
+        resumePredictionAlarmAt: resume.resumeAt,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -418,9 +555,7 @@ class _PredictionSettingsScreenState extends State<PredictionSettingsScreen> {
           title: 'Predicted low alarm',
           trailing: Switch(
             value: settings.predictionAlarmEnabled,
-            onChanged: (v) => state.updateAlarmSettings(
-              settings.copyWith(predictionAlarmEnabled: v),
-            ),
+            onChanged: (v) => _togglePredictionAlarm(state, settings, v),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -428,6 +563,11 @@ class _PredictionSettingsScreenState extends State<PredictionSettingsScreen> {
               Text(
                 'Uses only good-quality recent data. Critical current-low alarms still always run.',
               ),
+              if (!settings.predictionAlarmEnabled &&
+                  settings.resumePredictionAlarmAt != null) ...[
+                const SizedBox(height: 8),
+                Text(_formatAlarmResumeAt(settings.resumePredictionAlarmAt!)),
+              ],
               const SizedBox(height: 12),
               _ThresholdControl(
                 label: 'Predicted low cutoff',
@@ -454,6 +594,7 @@ class _PredictionSettingsScreenState extends State<PredictionSettingsScreen> {
                             AlarmSettingsStore.defaults.predictionAlgorithm,
                         predictionAlarmEnabled:
                             AlarmSettingsStore.defaults.predictionAlarmEnabled,
+                        resumePredictionAlarmAt: null,
                         predictionAlarmMmol:
                             AlarmSettingsStore.defaults.predictionAlarmMmol,
                       ),
